@@ -1,0 +1,14 @@
+node_modules
+.wxt
+.output
+web-ext-artifacts
+*.log
+stats.html
+.DS_Store
+
+# editor / tooling
+.cursor
+.wakatime-project
+
+# internal planning docs — not for the public repo
+docs/*.html
