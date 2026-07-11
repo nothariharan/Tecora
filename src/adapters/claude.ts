@@ -25,7 +25,7 @@ export class ClaudeAdapter implements Adapter {
     exportMessages: false,
   };
 
-  // per-tab cache for now. dexie takes over in m2 once folders need to survive reloads.
+  // staging cache — normalizes raw api data before background.ts writes to dexie.
   private chatCache = new Map<string, Chat>();
   private account: string | null = null;
   private lastIngestAt: number | null = null;

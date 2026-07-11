@@ -3,7 +3,8 @@
 //   L0 (page)  →  L1 (content)     window.postMessage
 //   L1           ↔  L2 (background)  runtime.sendMessage
 
-import type { Platform } from './types';
+import type { Chat, Folder, Platform } from './types';
+import type { SearchHit } from './search';
 
 // pages spam postMessage for all kinds of stuff — this key is how we filter ours
 export const PAGE_MSG_KEY = '__tecora__';
@@ -32,15 +33,21 @@ export function isPageEnvelope(data: unknown): data is PageEnvelope {
   );
 }
 
-import type { Chat, Folder } from './types';
-
 // L1 → L2
 export type RuntimeRequest =
   | { type: 'ping'; platform: string; at: number }
   | { type: 'upsert_chats'; chats: Chat[] }
   | { type: 'upsert_folder'; folder: Folder }
   | { type: 'assign_folder'; chatPk: string; folderId: string | null }
-  | { type: 'delete_folder'; folderId: string };
+  | { type: 'delete_folder'; folderId: string }
+  | {
+      type: 'search_chats';
+      query: string;
+      platform?: Platform;
+      account?: string;
+      limit?: number;
+    }
+  | { type: 'list_folders'; platform: Platform; account: string };
 
 // L2 → L1
 export type RuntimeResponse =
@@ -48,4 +55,6 @@ export type RuntimeResponse =
   | { type: 'upsert_chats_ok'; count: number }
   | { type: 'upsert_folder_ok'; folder: Folder }
   | { type: 'assign_folder_ok' }
-  | { type: 'delete_folder_ok' };
+  | { type: 'delete_folder_ok' }
+  | { type: 'search_chats_ok'; hits: SearchHit[]; titlesOnly: true }
+  | { type: 'list_folders_ok'; folders: Folder[] };

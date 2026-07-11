@@ -14,7 +14,7 @@ export default defineConfig({
     description:
       'folders, search, bulk cleanup and export for your ai chats — everything stays on your device',
     // storage for dexie + remote selector config later. that's it for now.
-    permissions: ['storage', 'sidePanel'],
+    permissions: ['storage', 'sidePanel', 'tabs'],
     action: {},
     host_permissions: platformHosts,
   },
