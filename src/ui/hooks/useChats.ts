@@ -12,13 +12,16 @@ export function useChats(
   return (
     useLiveQuery(
       async () => {
-        if (!platform || !account) return [];
-
-        let chats = await db.chats
-          .where('[platform+account]')
-          .equals([platform, account])
-          .reverse()
-          .sortBy('updatedAt');
+        // no active account yet — still show whatever we have so the panel
+        // isn't empty just because session storage hasn't caught up
+        let chats =
+          platform && account
+            ? await db.chats
+                .where('[platform+account]')
+                .equals([platform, account])
+                .reverse()
+                .sortBy('updatedAt')
+            : await db.chats.orderBy('updatedAt').reverse().toArray();
 
         if (folderId === '') {
           chats = chats.filter((c) => !c.folderId);

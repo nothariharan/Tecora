@@ -3,7 +3,7 @@
 //   L0 (page)  →  L1 (content)     window.postMessage
 //   L1           ↔  L2 (background)  runtime.sendMessage
 
-import type { Chat, Folder, Platform } from './types';
+import type { Chat, Folder, Message, Platform } from './types';
 import type { SearchHit } from './search';
 
 // pages spam postMessage for all kinds of stuff — this key is how we filter ours
@@ -47,7 +47,17 @@ export type RuntimeRequest =
       account?: string;
       limit?: number;
     }
-  | { type: 'list_folders'; platform: Platform; account: string };
+  | { type: 'list_folders'; platform: Platform; account: string }
+  // side panel → content script (targeted tabs.sendMessage). fetches full
+  // conversation bodies from claude in the page's authed context.
+  | { type: 'fetch_conversations'; orgId: string; chatIds: string[] };
+
+// per-chat result of a fetch_conversations request
+export interface FetchedConversation {
+  chatId: string;
+  messages: Message[];
+  error?: string;
+}
 
 // L2 → L1
 export type RuntimeResponse =
@@ -57,4 +67,5 @@ export type RuntimeResponse =
   | { type: 'assign_folder_ok' }
   | { type: 'delete_folder_ok' }
   | { type: 'search_chats_ok'; hits: SearchHit[]; titlesOnly: true }
-  | { type: 'list_folders_ok'; folders: Folder[] };
+  | { type: 'list_folders_ok'; folders: Folder[] }
+  | { type: 'fetch_conversations_ok'; results: FetchedConversation[] };

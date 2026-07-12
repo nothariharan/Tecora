@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Folder, Platform } from '@/src/core/types';
 import type { RuntimeRequest } from '@/src/core/bus';
+import { T } from '../theme';
 
 interface Props {
   platform: Platform;
@@ -42,7 +43,7 @@ export function NewFolderForm({ platform, account }: Props) {
           textAlign: 'left',
           padding: '6px 14px',
           fontSize: 12,
-          color: '#6b7280',
+          color: T.muted,
           background: 'none',
           border: 'none',
           cursor: 'pointer',
@@ -62,19 +63,32 @@ export function NewFolderForm({ platform, account }: Props) {
         placeholder="Folder name"
         style={{
           flex: 1,
-          border: '1px solid #d1d5db',
+          border: `1px solid ${T.borderStrong}`,
           borderRadius: 5,
           padding: '4px 8px',
           fontSize: 12,
+          color: T.fg,
+          outline: 'none',
         }}
       />
-      <button type="submit" style={{ fontSize: 12, padding: '4px 8px', borderRadius: 5, cursor: 'pointer' }}>
+      <button
+        type="submit"
+        style={{
+          fontSize: 12,
+          padding: '4px 8px',
+          borderRadius: 5,
+          cursor: 'pointer',
+          background: T.fg,
+          color: T.bg,
+          border: `1px solid ${T.fg}`,
+        }}
+      >
         Add
       </button>
       <button
         type="button"
         onClick={() => { setOpen(false); setName(''); }}
-        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 5, cursor: 'pointer', background: 'none', border: '1px solid #d1d5db' }}
+        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 5, cursor: 'pointer', color: T.fg, background: 'none', border: `1px solid ${T.borderStrong}` }}
       >
         ✕
       </button>

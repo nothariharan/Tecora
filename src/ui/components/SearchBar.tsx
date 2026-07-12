@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { T } from '../theme';
 
 interface Props {
   value: string;
@@ -15,7 +16,7 @@ export function SearchBar({ value, onChange }: Props) {
   }
 
   return (
-    <div style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb' }}>
+    <div style={{ padding: '8px 10px', borderBottom: `1px solid ${T.border}` }}>
       <input
         defaultValue={value}
         onChange={handleChange}
@@ -23,12 +24,13 @@ export function SearchBar({ value, onChange }: Props) {
         style={{
           width: '100%',
           boxSizing: 'border-box',
-          border: '1px solid #d1d5db',
+          border: `1px solid ${T.borderStrong}`,
           borderRadius: 6,
           padding: '6px 10px',
           fontSize: 13,
           outline: 'none',
-          background: '#f9fafb',
+          color: T.fg,
+          background: T.hover,
         }}
       />
     </div>

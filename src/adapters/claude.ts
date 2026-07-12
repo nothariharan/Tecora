@@ -15,6 +15,63 @@ function isRawClaudeChat(x: unknown): x is RawClaudeChat {
   return typeof o['uuid'] === 'string' && typeof o['updated_at'] === 'string';
 }
 
+// conversation-detail shape from
+//   GET /api/organizations/{org}/chat_conversations/{uuid}?rendering_mode=messages
+interface RawClaudeContentBlock {
+  type?: string;
+  text?: string;
+}
+interface RawClaudeMessage {
+  uuid?: string;
+  sender?: string; // 'human' | 'assistant'
+  text?: string;
+  content?: RawClaudeContentBlock[];
+  created_at?: string;
+}
+
+// pull readable text out of a claude message. newer responses put the body in
+// `content[].text` blocks; older ones use a flat `text`. prefer blocks, fall back.
+function messageText(m: RawClaudeMessage): string {
+  if (Array.isArray(m.content)) {
+    const joined = m.content
+      .map((b) => (typeof b?.text === 'string' ? b.text : ''))
+      .filter(Boolean)
+      .join('\n\n')
+      .trim();
+    if (joined) return joined;
+  }
+  return typeof m.text === 'string' ? m.text : '';
+}
+
+// turn a raw conversation-detail payload into our Message[]. tolerant of the
+// array being bare or wrapped under `chat_messages`.
+export function normalizeMessages(chatPk: string, data: unknown): Message[] {
+  let raw: unknown[] = [];
+  if (Array.isArray(data)) {
+    raw = data;
+  } else if (data && typeof data === 'object') {
+    const o = data as Record<string, unknown>;
+    const arr = o['chat_messages'] ?? o['messages'];
+    if (Array.isArray(arr)) raw = arr;
+  }
+
+  const messages: Message[] = [];
+  raw.forEach((item, index) => {
+    if (typeof item !== 'object' || item === null) return;
+    const m = item as RawClaudeMessage;
+    const role: Message['role'] =
+      m.sender === 'human' ? 'user' : m.sender === 'assistant' ? 'assistant' : 'system';
+    messages.push({
+      pk: `${chatPk}:${index}`,
+      chatPk,
+      role,
+      text: messageText(m),
+      ts: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
+    });
+  });
+  return messages;
+}
+
 export class ClaudeAdapter implements Adapter {
   readonly id = 'claude' as const;
 
@@ -22,7 +79,7 @@ export class ClaudeAdapter implements Adapter {
     archive: false,
     delete: false,
     rename: false,
-    exportMessages: false,
+    exportMessages: true,
   };
 
   // staging cache — normalizes raw api data before background.ts writes to dexie.

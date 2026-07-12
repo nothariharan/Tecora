@@ -12,3 +12,6 @@ stats.html
 
 # internal planning docs — not for the public repo
 docs/*.html
+
+# local chrome profile used by the launch script
+.tecora-chrome-profile

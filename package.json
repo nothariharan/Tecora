@@ -12,6 +12,7 @@
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
     "test": "vitest run",
+    "launch": "npm run build && node scripts/launch-with-extension.mjs",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

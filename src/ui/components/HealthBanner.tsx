@@ -1,20 +1,27 @@
 import React from 'react';
+import { T } from '../theme';
 
 interface Props {
   hasData: boolean;
+  hasActiveAccount: boolean;
 }
 
-export function HealthBanner({ hasData }: Props) {
+export function HealthBanner({ hasData, hasActiveAccount }: Props) {
   if (hasData) return null;
+
+  const message = hasActiveAccount
+    ? 'Waiting for chats… try refreshing claude.ai or open Recents.'
+    : 'Open claude.ai (logged in) and wait a few seconds — Tecora reads the chat list from the page.';
+
   return (
     <div style={{
       padding: '10px 12px',
-      background: '#fef9c3',
-      borderBottom: '1px solid #fde047',
+      background: T.noticeBg,
+      borderBottom: `1px solid ${T.noticeBorder}`,
       fontSize: 12,
-      color: '#713f12',
+      color: T.noticeFg,
     }}>
-      Navigate to claude.ai to load your chats.
+      {message}
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import type { Chat, Folder } from '@/src/core/types';
 import type { RuntimeRequest } from '@/src/core/bus';
+import { useExport } from '../ExportContext';
+import { T } from '../theme';
 
 interface Props {
   chat: Chat;
@@ -19,6 +21,7 @@ function relativeTime(ts: number): string {
 
 export function ChatItem({ chat, folders }: Props) {
   const [showMenu, setShowMenu] = useState(false);
+  const { busy, exportChats } = useExport();
 
   async function assignFolder(folderId: string | null) {
     setShowMenu(false);
@@ -27,6 +30,11 @@ export function ChatItem({ chat, folders }: Props) {
       chatPk: chat.pk,
       folderId,
     } satisfies RuntimeRequest);
+  }
+
+  function exportThis() {
+    setShowMenu(false);
+    if (!busy) exportChats([chat], chat.title, true);
   }
 
   async function openChat() {
@@ -40,8 +48,14 @@ export function ChatItem({ chat, folders }: Props) {
 
   const currentFolder = folders.find((f) => f.id === chat.folderId);
 
+  const menuItem: React.CSSProperties = {
+    padding: '5px 12px',
+    cursor: 'pointer',
+    color: T.fg,
+  };
+
   return (
-    <div style={{ position: 'relative', borderBottom: '1px solid #f3f4f6' }}>
+    <div style={{ position: 'relative', borderBottom: `1px solid ${T.border}` }}>
       <div
         onClick={openChat}
         style={{
@@ -51,14 +65,14 @@ export function ChatItem({ chat, folders }: Props) {
           flexDirection: 'column',
           gap: 3,
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = '#f9fafb')}
+        onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <span style={{
             fontSize: 13,
             fontWeight: 500,
-            color: '#111827',
+            color: T.fg,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -66,26 +80,27 @@ export function ChatItem({ chat, folders }: Props) {
           }}>
             {chat.title}
           </span>
-          <span style={{ fontSize: 11, color: '#9ca3af', flexShrink: 0 }}>
+          <span style={{ fontSize: 11, color: T.faint, flexShrink: 0 }}>
             {relativeTime(chat.updatedAt)}
           </span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           {currentFolder ? (
-            <span style={{ fontSize: 11, color: '#6b7280' }}>📁 {currentFolder.name}</span>
+            <span style={{ fontSize: 11, color: T.muted }}>{currentFolder.name}</span>
           ) : (
             <span />
           )}
           <button
             onClick={(e) => { e.stopPropagation(); setShowMenu((v) => !v); }}
             style={{
-              fontSize: 11,
-              color: '#9ca3af',
+              fontSize: 13,
+              color: T.faint,
               background: 'none',
               border: 'none',
               cursor: 'pointer',
               padding: '0 2px',
+              lineHeight: 1,
             }}
           >
             ⋯
@@ -95,24 +110,26 @@ export function ChatItem({ chat, folders }: Props) {
 
       {showMenu && (
         <div style={{
-          position: 'absolute',
-          right: 10,
-          bottom: '100%',
-          background: '#fff',
-          border: '1px solid #e5e7eb',
-          borderRadius: 6,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-          zIndex: 10,
-          minWidth: 150,
+          background: T.hover,
+          borderTop: `1px solid ${T.border}`,
           padding: '4px 0',
           fontSize: 12,
         }}>
-          <div style={{ padding: '4px 10px', color: '#9ca3af', fontWeight: 600, fontSize: 11 }}>Move to folder</div>
+          <div
+            onClick={exportThis}
+            style={{ ...menuItem, fontWeight: 600 }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = T.selectedBg)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            Export as markdown
+          </div>
+          <div style={{ height: 1, background: T.border, margin: '4px 0' }} />
+          <div style={{ padding: '4px 12px', color: T.faint, fontWeight: 600, fontSize: 11 }}>Move to folder</div>
           {chat.folderId && (
             <div
               onClick={() => assignFolder(null)}
-              style={{ padding: '5px 12px', cursor: 'pointer', color: '#374151' }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f3f4f6')}
+              style={menuItem}
+              onMouseEnter={(e) => (e.currentTarget.style.background = T.selectedBg)}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
               Remove from folder
@@ -123,19 +140,19 @@ export function ChatItem({ chat, folders }: Props) {
               key={f.id}
               onClick={() => assignFolder(f.id)}
               style={{
-                padding: '5px 12px',
-                cursor: 'pointer',
-                color: chat.folderId === f.id ? '#1d4ed8' : '#374151',
+                ...menuItem,
                 fontWeight: chat.folderId === f.id ? 600 : 400,
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f3f4f6')}
+              onMouseEnter={(e) => (e.currentTarget.style.background = T.selectedBg)}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
-              📁 {f.name}
+              {chat.folderId === f.id ? '✓ ' : ''}{f.name}
             </div>
           ))}
           {folders.length === 0 && (
-            <div style={{ padding: '5px 12px', color: '#9ca3af' }}>No folders yet</div>
+            <div style={{ padding: '5px 12px', color: T.faint }}>
+              No folders yet — create one under the folder list above.
+            </div>
           )}
         </div>
       )}

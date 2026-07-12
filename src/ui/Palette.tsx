@@ -213,7 +213,7 @@ export const PALETTE_STYLES = `
     pointer-events: auto;
     position: fixed;
     inset: 0;
-    background: rgba(10, 12, 18, 0.45);
+    background: rgba(0, 0, 0, 0.45);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -222,11 +222,10 @@ export const PALETTE_STYLES = `
   }
   .panel {
     width: min(560px, calc(100vw - 32px));
-    background: #111827;
+    background: #111111;
     color: #e5e7eb;
-    border: 1px solid #374151;
+    border: 1px solid #333333;
     border-radius: 12px;
-    box-shadow: 0 24px 64px rgba(0,0,0,0.45);
     overflow: hidden;
   }
   .input-row {
@@ -234,14 +233,14 @@ export const PALETTE_STYLES = `
     align-items: center;
     gap: 8px;
     padding: 12px 14px;
-    border-bottom: 1px solid #1f2937;
+    border-bottom: 1px solid #262626;
   }
   .input-row input {
     flex: 1;
     background: transparent;
     border: none;
     outline: none;
-    color: #f9fafb;
+    color: #ffffff;
     font-size: 15px;
   }
   .badge {
@@ -249,7 +248,7 @@ export const PALETTE_STYLES = `
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: #9ca3af;
-    border: 1px solid #374151;
+    border: 1px solid #333333;
     border-radius: 999px;
     padding: 2px 7px;
     white-space: nowrap;
@@ -266,7 +265,7 @@ export const PALETTE_STYLES = `
     border-radius: 8px;
     cursor: pointer;
   }
-  .item.active { background: #1f2937; }
+  .item.active { background: #262626; }
   .title {
     font-size: 13px;
     font-weight: 500;
@@ -293,7 +292,7 @@ export const PALETTE_STYLES = `
     display: flex;
     gap: 14px;
     padding: 8px 14px;
-    border-top: 1px solid #1f2937;
+    border-top: 1px solid #262626;
     font-size: 11px;
     color: #6b7280;
   }

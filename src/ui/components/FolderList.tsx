@@ -3,6 +3,7 @@ import type { Folder, Platform } from '@/src/core/types';
 import type { Chat } from '@/src/core/types';
 import { FolderItem } from './FolderItem';
 import { NewFolderForm } from './NewFolderForm';
+import { T } from '../theme';
 
 interface Props {
   folders: Folder[];
@@ -13,38 +14,45 @@ interface Props {
   account: string;
 }
 
+const rowBase: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '5px 14px',
+  cursor: 'pointer',
+  borderRadius: 5,
+  margin: '1px 4px',
+  fontSize: 13,
+};
+
+function pill(selected: boolean): React.CSSProperties {
+  return {
+    fontSize: 11,
+    background: selected ? '#d9d9d9' : T.pillBg,
+    color: T.pillFg,
+    borderRadius: 10,
+    padding: '1px 6px',
+  };
+}
+
 export function FolderList({ folders, allChats, selectedFolderId, onSelect, platform, account }: Props) {
   const allCount = allChats.length;
   const unassignedCount = allChats.filter((c) => !c.folderId).length;
 
   return (
-    <div style={{ borderBottom: '1px solid #e5e7eb', paddingBottom: 6 }}>
+    <div style={{ borderBottom: `1px solid ${T.border}`, paddingBottom: 6 }}>
       {/* All chats */}
       <div
         onClick={() => onSelect(null)}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '5px 14px',
-          cursor: 'pointer',
-          borderRadius: 5,
-          margin: '1px 4px',
-          background: selectedFolderId === null ? '#eff6ff' : 'transparent',
-          color: selectedFolderId === null ? '#1d4ed8' : '#374151',
-          fontSize: 13,
-          fontWeight: 500,
+          ...rowBase,
+          background: selectedFolderId === null ? T.selectedBg : 'transparent',
+          color: selectedFolderId === null ? T.selectedFg : T.fg,
+          fontWeight: selectedFolderId === null ? 600 : 500,
         }}
       >
         <span>All chats</span>
-        <span style={{
-          fontSize: 11,
-          background: selectedFolderId === null ? '#bfdbfe' : '#e5e7eb',
-          borderRadius: 10,
-          padding: '1px 6px',
-        }}>
-          {allCount}
-        </span>
+        <span style={pill(selectedFolderId === null)}>{allCount}</span>
       </div>
 
       {/* Unassigned */}
@@ -52,27 +60,14 @@ export function FolderList({ folders, allChats, selectedFolderId, onSelect, plat
         <div
           onClick={() => onSelect('')}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '5px 14px',
-            cursor: 'pointer',
-            borderRadius: 5,
-            margin: '1px 4px',
-            background: selectedFolderId === '' ? '#eff6ff' : 'transparent',
-            color: selectedFolderId === '' ? '#1d4ed8' : '#6b7280',
-            fontSize: 13,
+            ...rowBase,
+            background: selectedFolderId === '' ? T.selectedBg : 'transparent',
+            color: selectedFolderId === '' ? T.selectedFg : T.muted,
+            fontWeight: selectedFolderId === '' ? 600 : 400,
           }}
         >
           <span>Unassigned</span>
-          <span style={{
-            fontSize: 11,
-            background: selectedFolderId === '' ? '#bfdbfe' : '#e5e7eb',
-            borderRadius: 10,
-            padding: '1px 6px',
-          }}>
-            {unassignedCount}
-          </span>
+          <span style={pill(selectedFolderId === '')}>{unassignedCount}</span>
         </div>
       )}
 
@@ -81,7 +76,7 @@ export function FolderList({ folders, allChats, selectedFolderId, onSelect, plat
         <FolderItem
           key={f.id}
           folder={f}
-          count={allChats.filter((c) => c.folderId === f.id).length}
+          chats={allChats.filter((c) => c.folderId === f.id)}
           selected={selectedFolderId === f.id}
           onSelect={() => onSelect(f.id)}
         />

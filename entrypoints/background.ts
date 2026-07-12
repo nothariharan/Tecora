@@ -144,5 +144,10 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
         .toArray();
       return { type: 'list_folders_ok', folders };
     }
+
+    case 'fetch_conversations':
+      // handled by the content script (authed page context), never the worker.
+      // this branch only exists to keep the switch exhaustive.
+      return { type: 'fetch_conversations_ok', results: [] };
   }
 }
