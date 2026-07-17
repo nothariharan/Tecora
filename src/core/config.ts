@@ -15,6 +15,12 @@ export interface SelectorConfig {
     deleteMenuItem: string[];
     confirmDeleteBtn: string[];
   };
+  gemini: {
+    chatListItem: string[];
+    chatMenuButton: string[];
+    deleteMenuItem: string[];
+    confirmDeleteBtn: string[];
+  };
 }
 
 const STORAGE_KEY = 'tecora_remote_selectors';

@@ -36,5 +36,25 @@
       "button.btn-danger",
       "button"
     ]
+  },
+  "gemini": {
+    "chatListItem": [
+      "a[href*='/app/']",
+      "a[href*='/chat/']"
+    ],
+    "chatMenuButton": [
+      "button[aria-haspopup='true']",
+      "button[aria-label*='options']",
+      "button[aria-label*='actions']"
+    ],
+    "deleteMenuItem": [
+      "[role='menuitem']",
+      "button",
+      "div"
+    ],
+    "confirmDeleteBtn": [
+      "button",
+      "button.danger"
+    ]
   }
 }

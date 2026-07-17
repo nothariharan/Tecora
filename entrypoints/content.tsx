@@ -3,6 +3,7 @@ import { isPageEnvelope } from '@/src/core/bus';
 import type { FetchedConversation, RuntimeRequest, RuntimeResponse } from '@/src/core/bus';
 import { ClaudeAdapter, normalizeMessages } from '@/src/adapters/claude';
 import { ChatGPTAdapter, normalizeChatGPTMessages } from '@/src/adapters/chatgpt';
+import { GeminiAdapter } from '@/src/adapters/gemini';
 import { mountShadowApp } from '@/src/ui/shadow-root';
 import { Palette, PALETTE_STYLES } from '@/src/ui/Palette';
 import { StatusChip, CHIP_STYLES } from '@/src/ui/StatusChip';
@@ -26,7 +27,12 @@ export default defineContentScript({
         ? 'gemini'
         : 'claude';
 
-    const adapter: Adapter = platform === 'chatgpt' ? new ChatGPTAdapter() : new ClaudeAdapter();
+    const adapter: Adapter =
+      platform === 'chatgpt'
+        ? new ChatGPTAdapter()
+        : platform === 'gemini'
+          ? new GeminiAdapter()
+          : new ClaudeAdapter();
     let pushed = false;
 
     const bridge = {
@@ -140,6 +146,21 @@ export default defineContentScript({
       setTimeout(() => void activeFetch(), 3000);
       setTimeout(() => void scrapeOnce(), 5000);
       setTimeout(() => void scrapeOnce(), 9000);
+    }
+
+    const scrapeGemini = async () => {
+      if (platform !== 'gemini') return;
+      if (!(adapter instanceof GeminiAdapter)) return;
+      const scraped = adapter.scrapeChatsFromDOM('default');
+      if (scraped.length === 0) return;
+      console.log('[tecora] gemini scraped', scraped.length, 'chats');
+      await pushChats(scraped, 'default');
+    };
+
+    if (platform === 'gemini') {
+      setTimeout(() => void scrapeGemini(), 3000);
+      setTimeout(() => void scrapeGemini(), 7000);
+      setInterval(() => void scrapeGemini(), 15000);
     }
 
     async function pushChats(raw: unknown[], account: string) {
