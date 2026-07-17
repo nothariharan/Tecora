@@ -36,20 +36,25 @@ function getRequestUrl(input: RequestInfo | URL): string {
 }
 
 function patchFetch() {
+  if ((window.fetch as any).__tecoraPatched) return;
   const _fetch = window.fetch.bind(window);
 
-  window.fetch = async function (...args: Parameters<typeof fetch>) {
+  const newFetch = async function (...args: Parameters<typeof fetch>) {
     const response = await _fetch(...args);
     tryIntercept(getRequestUrl(args[0]), response.clone());
     return response;
   };
+  (newFetch as any).__tecoraPatched = true;
+  window.fetch = newFetch;
 }
 
 function patchXhr() {
+  if ((XMLHttpRequest.prototype.open as any).__tecoraPatched) return;
   const _open = XMLHttpRequest.prototype.open;
   const _send = XMLHttpRequest.prototype.send;
 
-  XMLHttpRequest.prototype.open = function (
+  const newOpen = function (
+    this: any,
     method: string,
     url: string | URL,
     ...rest: unknown[]
@@ -57,8 +62,10 @@ function patchXhr() {
     (this as XMLHttpRequest & { __tecoraUrl?: string }).__tecoraUrl = String(url);
     return _open.apply(this, [method, url, ...rest] as Parameters<typeof _open>);
   };
+  (newOpen as any).__tecoraPatched = true;
+  XMLHttpRequest.prototype.open = newOpen;
 
-  XMLHttpRequest.prototype.send = function (...args: Parameters<typeof _send>) {
+  XMLHttpRequest.prototype.send = function (this: any, ...args: Parameters<typeof _send>) {
     this.addEventListener('load', () => {
       const url = (this as XMLHttpRequest & { __tecoraUrl?: string }).__tecoraUrl;
       if (!url) return;

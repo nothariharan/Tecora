@@ -23,5 +23,14 @@ export class TecoraDB extends Dexie {
   }
 }
 
-// never import this from content scripts — extension IndexedDB is not reachable there
-export const db = new TecoraDB();
+let dbInstance: TecoraDB;
+try {
+  dbInstance = new TecoraDB();
+  dbInstance.on('blocked', () => {
+    console.warn('[tecora] database access blocked by another active tab');
+  });
+} catch (err) {
+  console.error('[tecora] failed to initialize Dexie database:', err);
+  dbInstance = new Dexie('tecora_fallback') as TecoraDB;
+}
+export const db = dbInstance;

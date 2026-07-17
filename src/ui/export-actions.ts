@@ -71,16 +71,29 @@ export function useExporter() {
 
       try {
         const messagesByChat = new Map<string, Message[]>();
+        
+        const chatsByAccount = new Map<string, Chat[]>();
+        for (const chat of chats) {
+          const list = chatsByAccount.get(chat.account) || [];
+          list.push(chat);
+          chatsByAccount.set(chat.account, list);
+        }
+
+        let done = 0;
         const chunkSize = 4;
-        for (let i = 0; i < chats.length; i += chunkSize) {
-          const chunk = chats.slice(i, i + chunkSize);
-          const map = await fetchMessages(
-            tabId,
-            orgId,
-            chunk.map((c) => c.chatId),
-          );
-          map.forEach((v, k) => messagesByChat.set(k, v));
-          setProgress({ done: Math.min(i + chunkSize, chats.length), total: chats.length });
+
+        for (const [orgId, accountChats] of chatsByAccount.entries()) {
+          for (let i = 0; i < accountChats.length; i += chunkSize) {
+            const chunk = accountChats.slice(i, i + chunkSize);
+            const map = await fetchMessages(
+              tabId,
+              orgId,
+              chunk.map((c) => c.chatId),
+            );
+            map.forEach((v, k) => messagesByChat.set(k, v));
+            done += chunk.length;
+            setProgress({ done, total: chats.length });
+          }
         }
 
         if (single && chats.length === 1) {

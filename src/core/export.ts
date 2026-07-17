@@ -10,9 +10,9 @@ const PLATFORM_LABEL: Record<Platform, string> = {
   gemini: 'Gemini',
 };
 
-function roleLabel(role: Message['role']): string {
+function roleLabel(role: Message['role'], platform: Platform): string {
   if (role === 'user') return 'You';
-  if (role === 'assistant') return 'Claude';
+  if (role === 'assistant') return PLATFORM_LABEL[platform];
   return 'System';
 }
 
@@ -44,7 +44,7 @@ export function chatToMarkdown(chat: Chat, messages: Message[]): string {
   }
 
   messages.forEach((m, i) => {
-    lines.push(`**${roleLabel(m.role)}**`, '', m.text.trim() || '_(empty)_', '');
+    lines.push(`**${roleLabel(m.role, chat.platform)}**`, '', m.text.trim() || '_(empty)_', '');
     if (i < messages.length - 1) lines.push('---', '');
   });
 
@@ -75,7 +75,7 @@ export function bulkToMarkdown(entries: BulkEntry[], heading: string): string {
       out.push('_No messages captured._', '');
     }
     entry.messages.forEach((m) => {
-      out.push(`**${roleLabel(m.role)}**`, '', m.text.trim() || '_(empty)_', '');
+      out.push(`**${roleLabel(m.role, entry.chat.platform)}**`, '', m.text.trim() || '_(empty)_', '');
     });
     out.push('---', '');
   });

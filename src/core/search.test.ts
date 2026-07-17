@@ -85,9 +85,9 @@ describe('search index', () => {
     expect(hits[0]?.id).toBe('claude:o:1');
   });
 
-  it('updates an existing doc on upsert', () => {
+  it('updates an existing doc on upsert', async () => {
     const index = rebuildIndex(sample);
-    upsertChatsIntoIndex(index, [
+    await upsertChatsIntoIndex(index, [
       { ...sample[0]!, title: 'shipping the command palette' },
     ]);
     expect(index.search('command')).toHaveLength(1);

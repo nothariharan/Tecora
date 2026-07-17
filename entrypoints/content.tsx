@@ -20,6 +20,12 @@ export default defineContentScript({
   ],
   runAt: 'document_start',
   main() {
+    if ((window as any).__tecoraContentScriptActive) {
+      console.log('[tecora] content script already initialized for this tab');
+      return;
+    }
+    (window as any).__tecoraContentScriptActive = true;
+
     const hostname = window.location.hostname;
     const platform = hostname.includes('chatgpt.com')
       ? 'chatgpt'

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useActivePlatform } from './hooks/useActivePlatform';
 import { useChats } from './hooks/useChats';
 import { useFolders } from './hooks/useFolders';
@@ -28,7 +28,24 @@ export function SidePanel() {
   const account = active?.account ?? null;
 
   const allChats = useChats(platform, account, null, null, '');
-  const filteredChats = useChats(platform, account, selectedFolderId, selectedTagId, query);
+
+  const filteredChats = useMemo(() => {
+    let list = allChats;
+    if (selectedFolderId === '') {
+      list = list.filter((c) => !c.folderId);
+    } else if (selectedFolderId !== null) {
+      list = list.filter((c) => c.folderId === selectedFolderId);
+    }
+    if (selectedTagId !== null) {
+      list = list.filter((c) => c.tagIds && c.tagIds.includes(selectedTagId));
+    }
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter((c) => c.title.toLowerCase().includes(q));
+    }
+    return list;
+  }, [allChats, selectedFolderId, selectedTagId, query]);
+
   const folders = useFolders(platform, account);
   const tags = useTags(platform, account);
 

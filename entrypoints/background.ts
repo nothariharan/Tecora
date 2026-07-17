@@ -12,6 +12,7 @@ import { fetchRemoteConfig } from '@/src/core/config';
 // rebuilt from dexie whenever the worker wakes cold — never trust in-memory alone
 let chatIndex: MiniSearch<SearchHit> | null = null;
 let indexReady: Promise<void> | null = null;
+let isProcessingQueue = false;
 
 export default defineBackground(() => {
   restoreSessionContext();
@@ -174,16 +175,30 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
       }
 
       if (q) {
-        hits = chatIndex.search(q).map((r) => ({
-          pk: r.pk as string,
-          chatId: r.chatId as string,
-          title: r.title as string,
-          text: r.text as string | undefined,
-          platform: r.platform as SearchHit['platform'],
-          account: r.account as string,
-          folderId: r.folderId as string | undefined,
-          updatedAt: r.updatedAt as number,
-        }));
+        const results = chatIndex.search(q);
+        const topResults = results.slice(0, msg.limit ?? 12);
+        hits = await Promise.all(
+          topResults.map(async (r) => {
+            let text: string | undefined = undefined;
+            const pkVal = (r.pk || r.id) as string;
+            try {
+              const messages = await db.messages.where('chatPk').equals(pkVal).toArray();
+              text = messages.map((m) => m.text).join('\n');
+            } catch {
+              // ignore
+            }
+            return {
+              pk: pkVal,
+              chatId: r.chatId as string,
+              title: r.title as string,
+              text,
+              platform: r.platform as SearchHit['platform'],
+              account: r.account as string,
+              folderId: r.folderId as string | undefined,
+              updatedAt: r.updatedAt as number,
+            };
+          })
+        );
       } else {
         // empty query → recent chats for the active scope
         const chats = await db.chats.orderBy('updatedAt').reverse().limit(msg.limit ?? 12).toArray();
@@ -272,70 +287,85 @@ async function findPlatformTab(platform: Platform): Promise<number | null> {
 }
 
 async function processNextQueueItem() {
-  const data = await browser.storage.local.get('tecora_bulk_queue');
-  const queue = data['tecora_bulk_queue'] as BulkStatus | undefined;
-  if (!queue || !queue.active || queue.status !== 'running') return;
-
-  if (queue.currentIdx >= queue.chatPks.length) {
-    queue.active = false;
-    queue.status = 'completed';
-    await browser.storage.local.set({ tecora_bulk_queue: queue });
-    return;
-  }
-
-  const chatPk = queue.chatPks[queue.currentIdx];
-  const chat = await db.chats.get(chatPk);
-  if (!chat) {
-    queue.results.push({ chatPk, success: false, error: 'Chat not found in database' });
-    queue.currentIdx++;
-    await browser.storage.local.set({ tecora_bulk_queue: queue });
-    setTimeout(() => processNextQueueItem(), 1000);
-    return;
-  }
-
-  const tabId = await findPlatformTab(chat.platform);
-  if (!tabId) {
-    queue.status = 'paused';
-    queue.results.push({ chatPk, success: false, error: `Please open ${chat.platform} in a tab to continue` });
-    await browser.storage.local.set({ tecora_bulk_queue: queue });
-    return;
-  }
+  if (isProcessingQueue) return;
+  isProcessingQueue = true;
 
   try {
-    const response = (await browser.tabs.sendMessage(tabId, {
-      type: 'execute_delete',
-      chatPk,
-    } as RuntimeRequest)) as RuntimeResponse | undefined;
+    const data = await browser.storage.local.get('tecora_bulk_queue');
+    const queue = data['tecora_bulk_queue'] as BulkStatus | undefined;
+    if (!queue || !queue.active || queue.status !== 'running') {
+      isProcessingQueue = false;
+      return;
+    }
 
-    if (response && response.type === 'execute_delete_ok') {
-      await db.chats.delete(chatPk);
-      await db.messages.where('chatPk').equals(chatPk).delete();
-      indexReady = null;
-      chatIndex = null;
+    if (queue.currentIdx >= queue.chatPks.length) {
+      queue.active = false;
+      queue.status = 'completed';
+      await browser.storage.local.set({ tecora_bulk_queue: queue });
+      isProcessingQueue = false;
+      return;
+    }
 
-      queue.results.push({ chatPk, success: true });
-      queue.errors = 0;
-    } else {
-      const errMsg = response && response.type === 'execute_delete_error' ? response.error : 'Unknown error';
-      queue.results.push({ chatPk, success: false, error: errMsg });
+    const chatPk = queue.chatPks[queue.currentIdx];
+    const chat = await db.chats.get(chatPk);
+    if (!chat) {
+      queue.results.push({ chatPk, success: false, error: 'Chat not found in database' });
+      queue.currentIdx++;
+      await browser.storage.local.set({ tecora_bulk_queue: queue });
+      isProcessingQueue = false;
+      setTimeout(() => processNextQueueItem(), 1000);
+      return;
+    }
+
+    const tabId = await findPlatformTab(chat.platform);
+    if (!tabId) {
+      queue.status = 'paused';
+      queue.results.push({ chatPk, success: false, error: `Please open ${chat.platform} in a tab to continue` });
+      await browser.storage.local.set({ tecora_bulk_queue: queue });
+      isProcessingQueue = false;
+      return;
+    }
+
+    try {
+      const response = (await browser.tabs.sendMessage(tabId, {
+        type: 'execute_delete',
+        chatPk,
+      } as RuntimeRequest)) as RuntimeResponse | undefined;
+
+      if (response && response.type === 'execute_delete_ok') {
+        await db.chats.delete(chatPk);
+        await db.messages.where('chatPk').equals(chatPk).delete();
+        indexReady = null;
+        chatIndex = null;
+
+        queue.results.push({ chatPk, success: true });
+        queue.errors = 0;
+      } else {
+        const errMsg = response && response.type === 'execute_delete_error' ? response.error : 'Unknown error';
+        queue.results.push({ chatPk, success: false, error: errMsg });
+        queue.errors++;
+      }
+    } catch (err) {
+      queue.results.push({ chatPk, success: false, error: String(err) });
       queue.errors++;
     }
+
+    if (queue.errors >= 5) {
+      queue.active = false;
+      queue.status = 'failed';
+    } else {
+      queue.currentIdx++;
+    }
+
+    await browser.storage.local.set({ tecora_bulk_queue: queue });
+
+    isProcessingQueue = false;
+    if (queue.status === 'running') {
+      const delay = 1000 + Math.random() * 1000;
+      setTimeout(() => processNextQueueItem(), delay);
+    }
   } catch (err) {
-    queue.results.push({ chatPk, success: false, error: String(err) });
-    queue.errors++;
-  }
-
-  if (queue.errors >= 5) {
-    queue.active = false;
-    queue.status = 'failed';
-  } else {
-    queue.currentIdx++;
-  }
-
-  await browser.storage.local.set({ tecora_bulk_queue: queue });
-
-  if (queue.status === 'running') {
-    const delay = 1000 + Math.random() * 1000;
-    setTimeout(() => processNextQueueItem(), delay);
+    console.error('[tecora] queue processor error:', err);
+    isProcessingQueue = false;
   }
 }
