@@ -178,6 +178,7 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
           pk: r.pk as string,
           chatId: r.chatId as string,
           title: r.title as string,
+          text: r.text as string | undefined,
           platform: r.platform as SearchHit['platform'],
           account: r.account as string,
           folderId: r.folderId as string | undefined,

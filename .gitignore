@@ -16,4 +16,6 @@ docs/*.html
 .tecora-chrome-profile
 .tecora-chrome-profile-smoke
 .tecora-chrome-profile-smoke-prod
+.agents
+
 

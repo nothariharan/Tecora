@@ -16,14 +16,20 @@ export function useActivePlatform(): ActivePlatform | null {
       if (p && a) setActive({ platform: p as Platform, account: a });
     });
 
-    const listener = (changes: Record<string, { newValue?: unknown }>) => {
-      const p = changes['activePlatform']?.newValue as string | undefined;
-      const a = changes['activeAccount']?.newValue as string | undefined;
-      if (p && a) setActive({ platform: p as Platform, account: a });
+    const listener = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
+      if (areaName !== 'session') return;
+      setActive((prev) => {
+        const p = 'activePlatform' in changes ? (changes['activePlatform']?.newValue as Platform | undefined) : prev?.platform;
+        const a = 'activeAccount' in changes ? (changes['activeAccount']?.newValue as string | undefined) : prev?.account;
+        if (p && a) {
+          return { platform: p, account: a };
+        }
+        return prev;
+      });
     };
 
-    browser.storage.session.onChanged.addListener(listener);
-    return () => browser.storage.session.onChanged.removeListener(listener);
+    browser.storage.onChanged.addListener(listener);
+    return () => browser.storage.onChanged.removeListener(listener);
   }, []);
 
   return active;
