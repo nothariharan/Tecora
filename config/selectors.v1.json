@@ -17,5 +17,24 @@
       "button.danger",
       "button"
     ]
+  },
+  "chatgpt": {
+    "chatListItem": [
+      "a[href*='/c/']"
+    ],
+    "chatMenuButton": [
+      "button[aria-haspopup='menu']",
+      "button[data-testid*='actions']",
+      "button"
+    ],
+    "deleteMenuItem": [
+      "div[role='menuitem']",
+      "button[role='menuitem']"
+    ],
+    "confirmDeleteBtn": [
+      "button.bg-red-600",
+      "button.btn-danger",
+      "button"
+    ]
   }
 }

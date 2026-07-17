@@ -17,6 +17,7 @@ export interface Adapter {
   listChats(): Promise<Chat[]>;
   getMessages(chatId: string): Promise<Message[]>;
   currentAccount(): Promise<string | null>;
+  ingestRaw(items: unknown[], account: string): void;
 
   archive(chatId: string): Promise<void>;
   delete(chatId: string): Promise<void>;

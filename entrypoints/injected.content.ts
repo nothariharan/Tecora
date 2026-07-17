@@ -1,4 +1,5 @@
 import { PAGE_MSG_KEY, type PageEnvelope } from '@/src/core/bus';
+import type { Platform } from '@/src/core/types';
 
 // L0 — main world. isolated content scripts can't see fetch responses, so this
 // runs in the page's js context and patches fetch/xhr before claude boots.
@@ -63,12 +64,19 @@ function patchXhr() {
       if (!url) return;
       try {
         const data: unknown = JSON.parse(this.responseText);
-        const listMatch = matchClaudeChatList(url);
-        const detailMatch = matchClaudeChatDetail(url);
-        if (listMatch) {
-          handleListPayload(listMatch.orgId, data);
-        } else if (detailMatch) {
-          handleDetailPayload(detailMatch.orgId, detailMatch.chatId, data);
+        const claudeList = matchClaudeChatList(url);
+        const claudeDetail = matchClaudeChatDetail(url);
+        const chatgptList = matchChatGPTChatList(url);
+        const chatgptDetail = matchChatGPTChatDetail(url);
+
+        if (claudeList) {
+          handleListPayload('claude', claudeList.orgId, data);
+        } else if (claudeDetail) {
+          handleDetailPayload('claude', claudeDetail.orgId, claudeDetail.chatId, data);
+        } else if (chatgptList) {
+          handleListPayload('chatgpt', 'default', data);
+        } else if (chatgptDetail) {
+          handleDetailPayload('chatgpt', 'default', chatgptDetail.chatId, data);
         }
       } catch {
         // not json — ignore
@@ -79,26 +87,33 @@ function patchXhr() {
 }
 
 function tryIntercept(url: string, response: Response) {
-  const listMatch = matchClaudeChatList(url);
-  const detailMatch = matchClaudeChatDetail(url);
-  if (!listMatch && !detailMatch) return;
+  const claudeList = matchClaudeChatList(url);
+  const claudeDetail = matchClaudeChatDetail(url);
+  const chatgptList = matchChatGPTChatList(url);
+  const chatgptDetail = matchChatGPTChatDetail(url);
+
+  if (!claudeList && !claudeDetail && !chatgptList && !chatgptDetail) return;
 
   response
     .json()
     .then((data: unknown) => {
-      if (listMatch) {
-        handleListPayload(listMatch.orgId, data);
-      } else if (detailMatch) {
-        handleDetailPayload(detailMatch.orgId, detailMatch.chatId, data);
+      if (claudeList) {
+        handleListPayload('claude', claudeList.orgId, data);
+      } else if (claudeDetail) {
+        handleDetailPayload('claude', claudeDetail.orgId, claudeDetail.chatId, data);
+      } else if (chatgptList) {
+        handleListPayload('chatgpt', 'default', data);
+      } else if (chatgptDetail) {
+        handleDetailPayload('chatgpt', 'default', chatgptDetail.chatId, data);
       }
     })
     .catch(() => {});
 }
 
-function handleListPayload(orgId: string, data: unknown) {
+function handleListPayload(platform: Platform, orgId: string, data: unknown) {
   const raw = extractChatArray(data);
   if (!raw) {
-    console.warn('[tecora] chat_conversations response was not a list', typeof data);
+    console.warn('[tecora] chat response was not a list', typeof data);
     return;
   }
 
@@ -106,22 +121,22 @@ function handleListPayload(orgId: string, data: unknown) {
     [PAGE_MSG_KEY]: true,
     msg: {
       kind: 'chats_intercepted',
-      platform: 'claude',
+      platform,
       account: orgId,
       raw,
       at: Date.now(),
     },
   };
   window.postMessage(envelope, window.location.origin);
-  console.log('[tecora] intercepted', raw.length, 'chats');
+  console.log('[tecora] intercepted', raw.length, 'chats for', platform);
 }
 
-function handleDetailPayload(orgId: string, chatId: string, data: unknown) {
+function handleDetailPayload(platform: Platform, orgId: string, chatId: string, data: unknown) {
   const envelope: PageEnvelope = {
     [PAGE_MSG_KEY]: true,
     msg: {
       kind: 'messages_intercepted',
-      platform: 'claude',
+      platform,
       account: orgId,
       chatId,
       raw: data,
@@ -129,10 +144,9 @@ function handleDetailPayload(orgId: string, chatId: string, data: unknown) {
     },
   };
   window.postMessage(envelope, window.location.origin);
-  console.log('[tecora] intercepted conversation detail for', chatId);
+  console.log('[tecora] intercepted conversation detail for', chatId, 'on', platform);
 }
 
-// claude has returned a bare array historically; stay tolerant if they wrap it.
 function extractChatArray(data: unknown): unknown[] | null {
   if (Array.isArray(data)) return data;
   if (typeof data !== 'object' || data === null) return null;
@@ -147,13 +161,12 @@ function extractChatArray(data: unknown): unknown[] | null {
 function matchClaudeChatList(url: string): { orgId: string } | null {
   try {
     const { pathname } = new URL(url, window.location.origin);
-    // list endpoint only — skip /chat_conversations/{uuid} detail fetches
     const m = pathname.match(
       /^\/api\/organizations\/([^/]+)\/chat_conversations\/?$/,
     );
     if (m) return { orgId: m[1] };
   } catch {
-    // bad/relative url — ignore
+    // ignore
   }
   return null;
 }
@@ -165,6 +178,28 @@ function matchClaudeChatDetail(url: string): { orgId: string; chatId: string } |
       /^\/api\/organizations\/([^/]+)\/chat_conversations\/([0-9a-f-]{8,})\/?$/,
     );
     if (m) return { orgId: m[1], chatId: m[2] };
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function matchChatGPTChatList(url: string): boolean {
+  try {
+    const { pathname } = new URL(url, window.location.origin);
+    return pathname.startsWith('/backend-api/conversations') && !pathname.includes('/conversation/');
+  } catch {
+    return false;
+  }
+}
+
+function matchChatGPTChatDetail(url: string): { chatId: string } | null {
+  try {
+    const { pathname } = new URL(url, window.location.origin);
+    const m = pathname.match(
+      /^\/backend-api\/conversation\/([0-9a-f-]{8,})\/?$/
+    );
+    if (m) return { chatId: m[1] };
   } catch {
     // ignore
   }

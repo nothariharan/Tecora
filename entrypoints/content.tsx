@@ -2,9 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { isPageEnvelope } from '@/src/core/bus';
 import type { FetchedConversation, RuntimeRequest, RuntimeResponse } from '@/src/core/bus';
 import { ClaudeAdapter, normalizeMessages } from '@/src/adapters/claude';
+import { ChatGPTAdapter, normalizeChatGPTMessages } from '@/src/adapters/chatgpt';
 import { mountShadowApp } from '@/src/ui/shadow-root';
 import { Palette, PALETTE_STYLES } from '@/src/ui/Palette';
 import { StatusChip, CHIP_STYLES } from '@/src/ui/StatusChip';
+import type { Adapter } from '@/src/adapters/base';
+import type { Platform } from '@/src/core/types';
 
 // L1 — isolated world. listens for L0 postMessages, hands off to the adapter,
 // and hosts the ctrl/cmd+k palette + a visible status chip in a shadow root.
@@ -16,7 +19,14 @@ export default defineContentScript({
   ],
   runAt: 'document_start',
   main() {
-    const claude = new ClaudeAdapter();
+    const hostname = window.location.hostname;
+    const platform = hostname.includes('chatgpt.com')
+      ? 'chatgpt'
+      : hostname.includes('gemini.google.com')
+        ? 'gemini'
+        : 'claude';
+
+    const adapter: Adapter = platform === 'chatgpt' ? new ChatGPTAdapter() : new ClaudeAdapter();
     let pushed = false;
 
     const bridge = {
@@ -27,7 +37,7 @@ export default defineContentScript({
     };
 
     mountShadowApp(
-      <OverlayApp adapter={claude} bridge={bridge} />,
+      <OverlayApp adapter={adapter} bridge={bridge} platform={platform} />,
       `${PALETTE_STYLES}\n${CHIP_STYLES}`,
     );
 
@@ -71,7 +81,7 @@ export default defineContentScript({
             sendResponse({ type: 'execute_delete_error', error: 'Invalid chat PK format' } satisfies RuntimeResponse);
             return false;
           }
-          claude.delete(uuid)
+          adapter.delete(uuid)
             .then(() => {
               sendResponse({ type: 'execute_delete_ok' } satisfies RuntimeResponse);
             })
@@ -95,19 +105,17 @@ export default defineContentScript({
         return;
       }
 
-      if (msg.kind === 'chats_intercepted' && msg.platform === 'claude') {
+      if (msg.kind === 'chats_intercepted' && msg.platform === platform) {
         await pushChats(msg.raw, msg.account);
       }
 
-      if (msg.kind === 'messages_intercepted' && msg.platform === 'claude') {
+      if (msg.kind === 'messages_intercepted' && msg.platform === platform) {
         await pushMessages(msg.chatId, msg.raw, msg.account);
       }
     });
 
-    // primary source of truth: actively pull claude's chat list ourselves, with
-    // real names + updated_at. beats waiting for a passive intercept (which only
-    // fires on the Chats page) and beats DOM scraping (fake times, doubled text).
     const activeFetch = async () => {
+      if (platform !== 'claude') return;
       if (pushed) return;
       const org = await resolveClaudeOrg();
       if (!org) return;
@@ -117,9 +125,8 @@ export default defineContentScript({
       await pushChats(list, org);
     };
 
-    // last resort only — the sidebar DOM. real org (so folders line up) and
-    // decreasing timestamps so at least the order matches claude's sidebar.
     const scrapeOnce = async () => {
+      if (platform !== 'claude') return;
       if (pushed) return;
       const org = (await resolveClaudeOrg()) ?? 'dom';
       const scraped = scrapeClaudeChatLinks();
@@ -128,16 +135,18 @@ export default defineContentScript({
       await pushChats(scraped, org);
     };
 
-    void activeFetch();
-    setTimeout(() => void activeFetch(), 3000);
-    setTimeout(() => void scrapeOnce(), 5000);
-    setTimeout(() => void scrapeOnce(), 9000);
+    if (platform === 'claude') {
+      void activeFetch();
+      setTimeout(() => void activeFetch(), 3000);
+      setTimeout(() => void scrapeOnce(), 5000);
+      setTimeout(() => void scrapeOnce(), 9000);
+    }
 
     async function pushChats(raw: unknown[], account: string) {
-      claude.ingestRaw(raw, account);
+      adapter.ingestRaw(raw, account);
       bridge.setAccount(account);
 
-      const chats = await claude.listChats();
+      const chats = await adapter.listChats();
       bridge.setChatCount(chats.length);
       console.log('[tecora] chats ready', { count: chats.length });
 
@@ -151,8 +160,11 @@ export default defineContentScript({
     }
 
     async function pushMessages(chatId: string, raw: unknown, account: string) {
-      const chatPk = `claude:${account}:${chatId}`;
-      const messages = normalizeMessages(chatPk, raw);
+      const chatPk = `${platform}:${account}:${chatId}`;
+      const messages =
+        platform === 'chatgpt'
+          ? normalizeChatGPTMessages(chatPk, raw)
+          : normalizeMessages(chatPk, raw);
       console.log('[tecora] messages ready for', chatId, { count: messages.length });
 
       if (messages.length === 0) return;
@@ -296,14 +308,16 @@ function scrapeClaudeChatLinks(): unknown[] {
 function OverlayApp({
   adapter,
   bridge,
+  platform,
 }: {
-  adapter: ClaudeAdapter;
+  adapter: Adapter;
   bridge: {
     setOpen: (v: boolean) => void;
     setAccount: (a: string | null) => void;
     setChatCount: (n: number) => void;
     getOpen: () => boolean;
   };
+  platform: Platform;
 }) {
   const [open, setOpen] = useState(false);
   const [account, setAccount] = useState<string | null>(null);
@@ -322,7 +336,7 @@ function OverlayApp({
       <Palette
         open={open}
         onClose={() => setOpen(false)}
-        platform="claude"
+        platform={platform}
         account={account}
         onOpenChat={(chatId) => adapter.openChat(chatId)}
       />
