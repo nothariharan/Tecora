@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { Folder, Platform } from '@/src/core/types';
+import type { Tag, Platform } from '@/src/core/types';
 import type { RuntimeRequest } from '@/src/core/bus';
 import { IconPlus, IconClose } from './Icons';
 import { T } from '../theme';
@@ -9,7 +9,7 @@ interface Props {
   account: string;
 }
 
-export function NewFolderForm({ platform, account }: Props) {
+export function NewTagForm({ platform, account }: Props) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
 
@@ -18,7 +18,7 @@ export function NewFolderForm({ platform, account }: Props) {
     const trimmed = name.trim();
     if (!trimmed) return;
 
-    const folder: Folder = {
+    const tag: Tag = {
       id: `${platform}:${account}:${Date.now()}`,
       platform,
       account,
@@ -26,8 +26,8 @@ export function NewFolderForm({ platform, account }: Props) {
     };
 
     await browser.runtime.sendMessage({
-      type: 'upsert_folder',
-      folder,
+      type: 'upsert_tag',
+      tag,
     } satisfies RuntimeRequest);
 
     setName('');
@@ -58,7 +58,7 @@ export function NewFolderForm({ platform, account }: Props) {
         onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = T.muted; }}
       >
         <IconPlus size={15} style={{ color: 'currentColor' }} />
-        <span>New folder</span>
+        <span>New tag</span>
       </button>
     );
   }
@@ -69,7 +69,7 @@ export function NewFolderForm({ platform, account }: Props) {
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Folder name"
+        placeholder="Tag name"
         style={{
           flex: 1,
           minWidth: 0,

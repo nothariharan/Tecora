@@ -1,13 +1,12 @@
 import MiniSearch from 'minisearch';
-import type { Chat } from './types';
-
-// tiny wrapper so background doesn't care about minisearch details.
-// titles only for now — message content lands here once we intercept transcripts.
+import type { Chat, Message } from './types';
+import { db } from './db';
 
 export type SearchHit = {
   pk: string;
   chatId: string;
   title: string;
+  text?: string;
   platform: Chat['platform'];
   account: string;
   folderId?: string;
@@ -17,8 +16,8 @@ export type SearchHit = {
 export function createChatIndex() {
   return new MiniSearch<SearchHit>({
     idField: 'pk',
-    fields: ['title'],
-    storeFields: ['pk', 'chatId', 'title', 'platform', 'account', 'folderId', 'updatedAt'],
+    fields: ['title', 'text'],
+    storeFields: ['pk', 'chatId', 'title', 'text', 'platform', 'account', 'folderId', 'updatedAt'],
     searchOptions: {
       prefix: true,
       fuzzy: 0.2,
@@ -38,9 +37,17 @@ export function chatToDoc(chat: Chat): SearchHit {
   };
 }
 
-export function upsertChatsIntoIndex(index: MiniSearch<SearchHit>, chats: Chat[]) {
+export async function upsertChatsIntoIndex(index: MiniSearch<SearchHit>, chats: Chat[]) {
   for (const chat of chats) {
     const doc = chatToDoc(chat);
+    try {
+      const messages = await db.messages.where('chatPk').equals(chat.pk).toArray();
+      doc.text = messages.map((m) => m.text).join('\n');
+    } catch {
+      // dexie not initialized/accessible (e.g. in tests)
+      doc.text = '';
+    }
+
     if (index.has(doc.pk)) {
       index.replace(doc);
     } else {
@@ -49,8 +56,20 @@ export function upsertChatsIntoIndex(index: MiniSearch<SearchHit>, chats: Chat[]
   }
 }
 
-export function rebuildIndex(chats: Chat[]): MiniSearch<SearchHit> {
+export function rebuildIndex(chats: Chat[], messages: Message[] = []): MiniSearch<SearchHit> {
   const index = createChatIndex();
-  index.addAll(chats.map(chatToDoc));
+  const textByChat = new Map<string, string>();
+  for (const m of messages) {
+    const current = textByChat.get(m.chatPk) || '';
+    textByChat.set(m.chatPk, current + '\n' + m.text);
+  }
+
+  const docs = chats.map((c) => {
+    const doc = chatToDoc(c);
+    doc.text = textByChat.get(c.pk) || '';
+    return doc;
+  });
+
+  index.addAll(docs);
   return index;
 }

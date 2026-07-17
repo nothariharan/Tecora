@@ -7,13 +7,20 @@ import fs from 'node:fs';
 // leave this running — close the browser window when you're done.
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const extensionPath = path.join(root, '.output', 'chrome-mv3');
+// prefer the live WXT dev build when `npm run dev` is up
+const devPath = path.join(root, '.output', 'chrome-mv3-dev');
+const prodPath = path.join(root, '.output', 'chrome-mv3');
+const extensionPath = fs.existsSync(path.join(devPath, 'manifest.json'))
+  ? devPath
+  : prodPath;
 const profilePath = path.join(root, '.tecora-chrome-profile');
 
 if (!fs.existsSync(path.join(extensionPath, 'manifest.json'))) {
-  console.error('no build found. run: npm run build');
+  console.error('no build found. run: npm run build  (or npm run dev)');
   process.exit(1);
 }
+
+console.log('loading extension from', extensionPath);
 
 fs.mkdirSync(profilePath, { recursive: true });
 

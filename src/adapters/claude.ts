@@ -1,5 +1,6 @@
 import type { Adapter } from './base';
 import type { Chat, HealthState, Message } from '@/src/core/types';
+import { getSelectors } from '@/src/core/config';
 
 // claude's conversation object — only the fields we actually pull out
 interface RawClaudeChat {
@@ -77,7 +78,7 @@ export class ClaudeAdapter implements Adapter {
 
   readonly capabilities = {
     archive: false,
-    delete: false,
+    delete: true,
     rename: false,
     exportMessages: true,
   };
@@ -129,8 +130,94 @@ export class ClaudeAdapter implements Adapter {
     throw new Error('archive not implemented yet');
   }
 
-  async delete(_chatId: string): Promise<void> {
-    throw new Error('delete not implemented yet');
+  async delete(chatId: string): Promise<void> {
+    const selectors = (await getSelectors()).claude;
+    
+    // 1. Find the chat list item matching the chatId
+    const itemSelector = `a[href*="/chat/${chatId}"]`;
+    const chatItem = document.querySelector(itemSelector) as HTMLElement | null;
+    if (!chatItem) {
+      throw new Error(`Could not find sidebar item for chat ${chatId}`);
+    }
+
+    // Scroll into view if needed
+    chatItem.scrollIntoView({ block: 'center' });
+
+    // 2. Find the menu button inside or next to this chat item
+    let menuBtn: HTMLElement | null = null;
+    for (const sel of selectors.chatMenuButton) {
+      const btn = chatItem.querySelector(sel) as HTMLElement | null;
+      if (btn) {
+        menuBtn = btn;
+        break;
+      }
+      const parent = chatItem.parentElement;
+      if (parent) {
+        const pBtn = parent.querySelector(sel) as HTMLElement | null;
+        if (pBtn) {
+          menuBtn = pBtn;
+          break;
+        }
+      }
+    }
+
+    if (!menuBtn) {
+      throw new Error(`Could not find menu button for chat ${chatId}`);
+    }
+
+    // 3. Open the menu by clicking the menu button
+    menuBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 300)); // wait for dropdown
+
+    // 4. Find the Delete menu item in the body/dropdown
+    let deleteItem: HTMLElement | null = null;
+    for (const sel of selectors.deleteMenuItem) {
+      const items = Array.from(document.querySelectorAll(sel)) as HTMLElement[];
+      const found = items.find((el) => el.textContent?.toLowerCase().includes('delete'));
+      if (found) {
+        deleteItem = found;
+        break;
+      }
+    }
+
+    if (!deleteItem) {
+      throw new Error(`Could not find Delete menu item in dropdown`);
+    }
+
+    // 5. Click the Delete menu item to open confirmation modal
+    deleteItem.click();
+    await new Promise((resolve) => setTimeout(resolve, 300)); // wait for modal
+
+    // 6. Find the confirmation button inside the modal
+    let confirmBtn: HTMLElement | null = null;
+    for (const sel of selectors.confirmDeleteBtn) {
+      const btns = Array.from(document.querySelectorAll(sel)) as HTMLElement[];
+      const found = btns.find((el) => el.textContent?.toLowerCase().includes('delete'));
+      if (found) {
+        confirmBtn = found;
+        break;
+      }
+    }
+
+    if (!confirmBtn) {
+      const allButtons = Array.from(document.querySelectorAll('button')) as HTMLElement[];
+      const found = allButtons.find((el) => el.textContent?.toLowerCase().includes('delete'));
+      if (found) confirmBtn = found;
+    }
+
+    if (!confirmBtn) {
+      throw new Error(`Could not find confirmation Delete button in modal`);
+    }
+
+    // 7. Confirm deletion
+    confirmBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 800)); // wait for delete
+
+    // 8. Verify the chat item is gone
+    const verifyItem = document.querySelector(itemSelector);
+    if (verifyItem) {
+      throw new Error(`Verification failed: chat item ${chatId} is still present in the sidebar`);
+    }
   }
 
   openChat(chatId: string): void {

@@ -1,10 +1,11 @@
 import Dexie, { type Table } from 'dexie';
-import type { Chat, Folder, Tag } from './types';
+import type { Chat, Folder, Tag, Message } from './types';
 
 export class TecoraDB extends Dexie {
   chats!: Table<Chat, string>;
   folders!: Table<Folder, string>;
   tags!: Table<Tag, string>;
+  messages!: Table<Message, string>;
 
   constructor() {
     super('tecora');
@@ -12,6 +13,12 @@ export class TecoraDB extends Dexie {
       chats:   'pk, [platform+account], folderId, updatedAt',
       folders: 'id, platform, account',
       tags:    'id, platform, account',
+    });
+    this.version(2).stores({
+      chats:   'pk, [platform+account], folderId, updatedAt, *tagIds',
+      folders: 'id, platform, account',
+      tags:    'id, platform, account',
+      messages: 'pk, chatPk, ts',
     });
   }
 }

@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { T } from '../theme';
+import { IconSearch } from './Icons';
 
 interface Props {
   value: string;
@@ -8,6 +9,7 @@ interface Props {
 
 export function SearchBar({ value, onChange }: Props) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [focused, setFocused] = useState(false);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = e.target.value;
@@ -16,23 +18,36 @@ export function SearchBar({ value, onChange }: Props) {
   }
 
   return (
-    <div style={{ padding: '8px 10px', borderBottom: `1px solid ${T.border}` }}>
-      <input
-        defaultValue={value}
-        onChange={handleChange}
-        placeholder="Search chats…"
-        style={{
-          width: '100%',
-          boxSizing: 'border-box',
-          border: `1px solid ${T.borderStrong}`,
-          borderRadius: 6,
-          padding: '6px 10px',
-          fontSize: 13,
-          outline: 'none',
-          color: T.fg,
-          background: T.hover,
-        }}
-      />
+    <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}` }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 7,
+        boxSizing: 'border-box',
+        border: `1px solid ${focused ? T.borderStrong : T.border}`,
+        borderRadius: T.radius,
+        padding: '0 10px',
+        background: focused ? T.bg : T.hover,
+        transition: 'background 120ms, border-color 120ms',
+      }}>
+        <IconSearch size={15} style={{ color: T.icon }} />
+        <input
+          defaultValue={value}
+          onChange={handleChange}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder="Search chats…"
+          style={{
+            flex: 1,
+            border: 'none',
+            padding: '7px 0',
+            fontSize: 13,
+            outline: 'none',
+            color: T.fg,
+            background: 'transparent',
+          }}
+        />
+      </div>
     </div>
   );
 }

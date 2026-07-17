@@ -58,11 +58,30 @@ export default defineContentScript({
     // bodies from claude in the page's own authed context, then hand them back.
     browser.runtime.onMessage.addListener(
       (message: RuntimeRequest, _sender, sendResponse): boolean => {
-        if (message.type !== 'fetch_conversations') return false;
-        fetchConversations(message.orgId, message.chatIds).then((results) => {
-          sendResponse({ type: 'fetch_conversations_ok', results } satisfies RuntimeResponse);
-        });
-        return true; // async response
+        if (message.type === 'fetch_conversations') {
+          fetchConversations(message.orgId, message.chatIds).then((results) => {
+            sendResponse({ type: 'fetch_conversations_ok', results } satisfies RuntimeResponse);
+          });
+          return true; // async response
+        }
+
+        if (message.type === 'execute_delete') {
+          const uuid = message.chatPk.split(':').pop();
+          if (!uuid) {
+            sendResponse({ type: 'execute_delete_error', error: 'Invalid chat PK format' } satisfies RuntimeResponse);
+            return false;
+          }
+          claude.delete(uuid)
+            .then(() => {
+              sendResponse({ type: 'execute_delete_ok' } satisfies RuntimeResponse);
+            })
+            .catch((err) => {
+              sendResponse({ type: 'execute_delete_error', error: String(err) } satisfies RuntimeResponse);
+            });
+          return true; // async response
+        }
+
+        return false;
       },
     );
 
@@ -78,6 +97,10 @@ export default defineContentScript({
 
       if (msg.kind === 'chats_intercepted' && msg.platform === 'claude') {
         await pushChats(msg.raw, msg.account);
+      }
+
+      if (msg.kind === 'messages_intercepted' && msg.platform === 'claude') {
+        await pushMessages(msg.chatId, msg.raw, msg.account);
       }
     });
 
@@ -124,6 +147,20 @@ export default defineContentScript({
       await browser.runtime.sendMessage({
         type: 'upsert_chats',
         chats,
+      } satisfies RuntimeRequest);
+    }
+
+    async function pushMessages(chatId: string, raw: unknown, account: string) {
+      const chatPk = `claude:${account}:${chatId}`;
+      const messages = normalizeMessages(chatPk, raw);
+      console.log('[tecora] messages ready for', chatId, { count: messages.length });
+
+      if (messages.length === 0) return;
+
+      await browser.runtime.sendMessage({
+        type: 'upsert_messages',
+        chatPk,
+        messages,
       } satisfies RuntimeRequest);
     }
   },

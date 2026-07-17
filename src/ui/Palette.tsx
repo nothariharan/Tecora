@@ -23,6 +23,19 @@ function relativeTime(ts: number): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function getSnippet(text: string | undefined, query: string): string | null {
+  if (!text || !query) return null;
+  const index = text.toLowerCase().indexOf(query.toLowerCase());
+  if (index === -1) return null;
+
+  const start = Math.max(0, index - 40);
+  const end = Math.min(text.length, index + query.length + 60);
+  let snippet = text.slice(start, end).replace(/\s+/g, ' ').trim();
+  if (start > 0) snippet = '...' + snippet;
+  if (end < text.length) snippet = snippet + '...';
+  return snippet;
+}
+
 async function searchChats(
   query: string,
   platform: Platform,
@@ -158,7 +171,7 @@ export function Palette({ open, onClose, platform, account, onOpenChat }: Props)
             placeholder='search chats…  or type ">" for commands'
             spellCheck={false}
           />
-          <span className="badge">titles only</span>
+          <span className="badge">full-text</span>
         </div>
 
         {mode === 'search' ? (
@@ -178,6 +191,22 @@ export function Palette({ open, onClose, platform, account, onOpenChat }: Props)
                 }}
               >
                 <div className="title">{hit.title}</div>
+                {hit.text && mode === 'search' && input && (
+                  <div
+                    className="snippet"
+                    style={{
+                      fontSize: '11px',
+                      color: '#9ca3af',
+                      marginTop: '2px',
+                      fontStyle: 'italic',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {getSnippet(hit.text, input)}
+                  </div>
+                )}
                 <div className="meta">
                   <span>{folderName(hit.folderId) ?? 'unfiled'}</span>
                   <span>{relativeTime(hit.updatedAt)}</span>

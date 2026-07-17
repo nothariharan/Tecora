@@ -5,8 +5,8 @@ import { useLiveQuery } from './useLiveQuery';
 export function useChats(
   platform: Platform | null,
   account: string | null,
-  // null = all chats, '' = unassigned only, string = specific folder
   folderId: string | null,
+  tagId: string | null,
   query: string,
 ): Chat[] {
   return (
@@ -29,6 +29,10 @@ export function useChats(
           chats = chats.filter((c) => c.folderId === folderId);
         }
 
+        if (tagId !== null) {
+          chats = chats.filter((c) => c.tagIds && c.tagIds.includes(tagId));
+        }
+
         if (query.trim()) {
           const q = query.toLowerCase();
           chats = chats.filter((c) => c.title.toLowerCase().includes(q));
@@ -36,7 +40,7 @@ export function useChats(
 
         return chats;
       },
-      [platform, account, folderId, query],
+      [platform, account, folderId, tagId, query],
       [],
     ) ?? []
   );

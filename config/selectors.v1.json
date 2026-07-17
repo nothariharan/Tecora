@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "claude": {
+    "chatListItem": [
+      "a[href*='/chat/']"
+    ],
+    "chatMenuButton": [
+      "button[aria-label*='actions']",
+      "button[aria-haspopup='menu']"
+    ],
+    "deleteMenuItem": [
+      "div[role='menuitem']",
+      "button[role='menuitem']"
+    ],
+    "confirmDeleteBtn": [
+      "button.bg-red-600",
+      "button.danger",
+      "button"
+    ]
+  }
+}

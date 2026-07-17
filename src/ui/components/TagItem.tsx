@@ -1,36 +1,34 @@
 import React, { useState } from 'react';
-import type { Chat, Folder } from '@/src/core/types';
+import type { Chat, Tag } from '@/src/core/types';
 import type { RuntimeRequest } from '@/src/core/bus';
 import { useExport } from '../ExportContext';
-import { IconFolder, IconFolderOpen, IconExport, IconTrash } from './Icons';
+import { IconTag, IconExport, IconTrash } from './Icons';
 import { T } from '../theme';
 
 interface Props {
-  folder: Folder;
+  tag: Tag;
   chats: Chat[];
   selected: boolean;
   onSelect: () => void;
 }
 
-export function FolderItem({ folder, chats, selected, onSelect }: Props) {
+export function TagItem({ tag, chats, selected, onSelect }: Props) {
   const [hover, setHover] = useState(false);
   const { busy, exportChats } = useExport();
 
-  async function deleteFolder(e: React.MouseEvent) {
+  async function deleteTag(e: React.MouseEvent) {
     e.stopPropagation();
     await browser.runtime.sendMessage({
-      type: 'delete_folder',
-      folderId: folder.id,
+      type: 'delete_tag',
+      tagId: tag.id,
     } satisfies RuntimeRequest);
   }
 
-  function exportFolder(e: React.MouseEvent) {
+  function exportTag(e: React.MouseEvent) {
     e.stopPropagation();
     if (busy || chats.length === 0) return;
-    exportChats(chats, folder.name);
+    exportChats(chats, tag.name);
   }
-
-  const Icon = selected ? IconFolderOpen : IconFolder;
 
   const actionBtn: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -59,9 +57,9 @@ export function FolderItem({ folder, chats, selected, onSelect }: Props) {
       }}
     >
       <span style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
-        <Icon size={15} style={{ color: selected ? T.fg : T.icon }} />
+        <IconTag size={15} style={{ color: selected ? T.fg : T.icon }} />
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {folder.name}
+          #{tag.name}
         </span>
       </span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
@@ -69,8 +67,8 @@ export function FolderItem({ folder, chats, selected, onSelect }: Props) {
           <>
             {chats.length > 0 && (
               <span
-                onClick={exportFolder}
-                title="Export folder as markdown"
+                onClick={exportTag}
+                title="Export tagged chats"
                 style={actionBtn}
                 onMouseEnter={(e) => { e.currentTarget.style.background = T.selectedBg; e.currentTarget.style.color = T.fg; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = T.icon; }}
@@ -79,8 +77,8 @@ export function FolderItem({ folder, chats, selected, onSelect }: Props) {
               </span>
             )}
             <span
-              onClick={deleteFolder}
-              title="Delete folder"
+              onClick={deleteTag}
+              title="Delete tag"
               style={actionBtn}
               onMouseEnter={(e) => { e.currentTarget.style.background = T.dangerBg; e.currentTarget.style.color = T.danger; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = T.icon; }}

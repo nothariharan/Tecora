@@ -63,7 +63,13 @@ function patchXhr() {
       if (!url) return;
       try {
         const data: unknown = JSON.parse(this.responseText);
-        handlePayload(url, data);
+        const listMatch = matchClaudeChatList(url);
+        const detailMatch = matchClaudeChatDetail(url);
+        if (listMatch) {
+          handleListPayload(listMatch.orgId, data);
+        } else if (detailMatch) {
+          handleDetailPayload(detailMatch.orgId, detailMatch.chatId, data);
+        }
       } catch {
         // not json — ignore
       }
@@ -73,18 +79,23 @@ function patchXhr() {
 }
 
 function tryIntercept(url: string, response: Response) {
-  if (!matchClaudeChatList(url)) return;
+  const listMatch = matchClaudeChatList(url);
+  const detailMatch = matchClaudeChatDetail(url);
+  if (!listMatch && !detailMatch) return;
 
   response
     .json()
-    .then((data: unknown) => handlePayload(url, data))
+    .then((data: unknown) => {
+      if (listMatch) {
+        handleListPayload(listMatch.orgId, data);
+      } else if (detailMatch) {
+        handleDetailPayload(detailMatch.orgId, detailMatch.chatId, data);
+      }
+    })
     .catch(() => {});
 }
 
-function handlePayload(url: string, data: unknown) {
-  const claude = matchClaudeChatList(url);
-  if (!claude) return;
-
+function handleListPayload(orgId: string, data: unknown) {
   const raw = extractChatArray(data);
   if (!raw) {
     console.warn('[tecora] chat_conversations response was not a list', typeof data);
@@ -96,13 +107,29 @@ function handlePayload(url: string, data: unknown) {
     msg: {
       kind: 'chats_intercepted',
       platform: 'claude',
-      account: claude.orgId,
+      account: orgId,
       raw,
       at: Date.now(),
     },
   };
   window.postMessage(envelope, window.location.origin);
   console.log('[tecora] intercepted', raw.length, 'chats');
+}
+
+function handleDetailPayload(orgId: string, chatId: string, data: unknown) {
+  const envelope: PageEnvelope = {
+    [PAGE_MSG_KEY]: true,
+    msg: {
+      kind: 'messages_intercepted',
+      platform: 'claude',
+      account: orgId,
+      chatId,
+      raw: data,
+      at: Date.now(),
+    },
+  };
+  window.postMessage(envelope, window.location.origin);
+  console.log('[tecora] intercepted conversation detail for', chatId);
 }
 
 // claude has returned a bare array historically; stay tolerant if they wrap it.
@@ -127,6 +154,19 @@ function matchClaudeChatList(url: string): { orgId: string } | null {
     if (m) return { orgId: m[1] };
   } catch {
     // bad/relative url — ignore
+  }
+  return null;
+}
+
+function matchClaudeChatDetail(url: string): { orgId: string; chatId: string } | null {
+  try {
+    const { pathname } = new URL(url, window.location.origin);
+    const m = pathname.match(
+      /^\/api\/organizations\/([^/]+)\/chat_conversations\/([0-9a-f-]{8,})\/?$/,
+    );
+    if (m) return { orgId: m[1], chatId: m[2] };
+  } catch {
+    // ignore
   }
   return null;
 }

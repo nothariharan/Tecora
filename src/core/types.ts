@@ -12,6 +12,8 @@ export interface Chat {
   title: string;
   updatedAt: number;
   folderId?: string; // tecora metadata, not from the platform
+  tagIds?: string[];  // local tags
+  pinned?: boolean;   // local pin state
 }
 
 export interface Message {

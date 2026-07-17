@@ -3,6 +3,7 @@ import type { Folder, Platform } from '@/src/core/types';
 import type { Chat } from '@/src/core/types';
 import { FolderItem } from './FolderItem';
 import { NewFolderForm } from './NewFolderForm';
+import { IconChats, IconInbox } from './Icons';
 import { T } from '../theme';
 
 interface Props {
@@ -18,29 +19,33 @@ const rowBase: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
-  padding: '5px 14px',
+  padding: '6px 10px',
   cursor: 'pointer',
-  borderRadius: 5,
-  margin: '1px 4px',
+  borderRadius: 7,
+  margin: '1px 6px',
   fontSize: 13,
 };
 
 function pill(selected: boolean): React.CSSProperties {
   return {
     fontSize: 11,
-    background: selected ? '#d9d9d9' : T.pillBg,
+    fontWeight: 550,
+    minWidth: 18,
+    textAlign: 'center',
+    background: selected ? T.pillStrongBg : T.pillBg,
     color: T.pillFg,
-    borderRadius: 10,
-    padding: '1px 6px',
+    borderRadius: 20,
+    padding: '1px 7px',
   };
 }
 
 export function FolderList({ folders, allChats, selectedFolderId, onSelect, platform, account }: Props) {
   const allCount = allChats.length;
   const unassignedCount = allChats.filter((c) => !c.folderId).length;
+  const showUnassigned = unassignedCount > 0 && folders.length > 0;
 
   return (
-    <div style={{ borderBottom: `1px solid ${T.border}`, paddingBottom: 6 }}>
+    <div style={{ borderBottom: `1px solid ${T.border}`, padding: '6px 0' }}>
       {/* All chats */}
       <div
         onClick={() => onSelect(null)}
@@ -50,24 +55,47 @@ export function FolderList({ folders, allChats, selectedFolderId, onSelect, plat
           color: selectedFolderId === null ? T.selectedFg : T.fg,
           fontWeight: selectedFolderId === null ? 600 : 500,
         }}
+        onMouseEnter={(e) => { if (selectedFolderId !== null) e.currentTarget.style.background = T.hover; }}
+        onMouseLeave={(e) => { if (selectedFolderId !== null) e.currentTarget.style.background = 'transparent'; }}
       >
-        <span>All chats</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+          <IconChats size={15} style={{ color: selectedFolderId === null ? T.fg : T.icon }} />
+          <span>All chats</span>
+        </span>
         <span style={pill(selectedFolderId === null)}>{allCount}</span>
       </div>
 
       {/* Unassigned */}
-      {unassignedCount > 0 && folders.length > 0 && (
+      {showUnassigned && (
         <div
           onClick={() => onSelect('')}
           style={{
             ...rowBase,
             background: selectedFolderId === '' ? T.selectedBg : 'transparent',
             color: selectedFolderId === '' ? T.selectedFg : T.muted,
-            fontWeight: selectedFolderId === '' ? 600 : 400,
+            fontWeight: selectedFolderId === '' ? 600 : 450,
           }}
+          onMouseEnter={(e) => { if (selectedFolderId !== '') e.currentTarget.style.background = T.hover; }}
+          onMouseLeave={(e) => { if (selectedFolderId !== '') e.currentTarget.style.background = 'transparent'; }}
         >
-          <span>Unassigned</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+            <IconInbox size={15} style={{ color: selectedFolderId === '' ? T.fg : T.icon }} />
+            <span>Unassigned</span>
+          </span>
           <span style={pill(selectedFolderId === '')}>{unassignedCount}</span>
+        </div>
+      )}
+
+      {folders.length > 0 && (
+        <div style={{
+          padding: '8px 16px 4px',
+          fontSize: 10.5,
+          fontWeight: 650,
+          letterSpacing: '0.5px',
+          textTransform: 'uppercase',
+          color: T.faint,
+        }}>
+          Folders
         </div>
       )}
 

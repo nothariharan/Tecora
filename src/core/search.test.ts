@@ -70,6 +70,21 @@ describe('search index', () => {
     expect(hits[0]?.id).toBe('claude:o:1');
   });
 
+  it('finds chats by message content', () => {
+    const index = rebuildIndex(sample, [
+      {
+        pk: 'claude:o:1:0',
+        chatPk: 'claude:o:1',
+        role: 'user',
+        text: 'we should build a glassmorphic sidebar component',
+        ts: 1,
+      },
+    ]);
+    const hits = index.search('glassmorphic');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.id).toBe('claude:o:1');
+  });
+
   it('updates an existing doc on upsert', () => {
     const index = rebuildIndex(sample);
     upsertChatsIntoIndex(index, [

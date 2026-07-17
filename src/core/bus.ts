@@ -3,7 +3,7 @@
 //   L0 (page)  →  L1 (content)     window.postMessage
 //   L1           ↔  L2 (background)  runtime.sendMessage
 
-import type { Chat, Folder, Message, Platform } from './types';
+import type { Chat, Folder, Message, Platform, Tag } from './types';
 import type { SearchHit } from './search';
 
 // pages spam postMessage for all kinds of stuff — this key is how we filter ours
@@ -17,6 +17,14 @@ export type PageMessage =
       platform: Platform;
       account: string;
       raw: unknown[];
+      at: number;
+    }
+  | {
+      kind: 'messages_intercepted';
+      platform: Platform;
+      account: string;
+      chatId: string;
+      raw: unknown;
       at: number;
     };
 
@@ -33,13 +41,27 @@ export function isPageEnvelope(data: unknown): data is PageEnvelope {
   );
 }
 
+export interface BulkStatus {
+  active: boolean;
+  chatPks: string[];
+  currentIdx: number;
+  errors: number;
+  results: { chatPk: string; success: boolean; error?: string }[];
+  status: 'idle' | 'running' | 'completed' | 'failed' | 'paused';
+}
+
 // L1 → L2
 export type RuntimeRequest =
   | { type: 'ping'; platform: string; at: number }
   | { type: 'upsert_chats'; chats: Chat[] }
+  | { type: 'upsert_messages'; chatPk: string; messages: Message[] }
   | { type: 'upsert_folder'; folder: Folder }
   | { type: 'assign_folder'; chatPk: string; folderId: string | null }
   | { type: 'delete_folder'; folderId: string }
+  | { type: 'upsert_tag'; tag: Tag }
+  | { type: 'assign_tags'; chatPk: string; tagIds: string[] }
+  | { type: 'delete_tag'; tagId: string }
+  | { type: 'list_tags'; platform: Platform; account: string }
   | {
       type: 'search_chats';
       query: string;
@@ -48,6 +70,9 @@ export type RuntimeRequest =
       limit?: number;
     }
   | { type: 'list_folders'; platform: Platform; account: string }
+  | { type: 'start_bulk_delete'; chatPks: string[] }
+  | { type: 'get_bulk_status' }
+  | { type: 'execute_delete'; chatPk: string }
   // side panel → content script (targeted tabs.sendMessage). fetches full
   // conversation bodies from claude in the page's authed context.
   | { type: 'fetch_conversations'; orgId: string; chatIds: string[] };
@@ -63,9 +88,18 @@ export interface FetchedConversation {
 export type RuntimeResponse =
   | { type: 'pong'; at: number }
   | { type: 'upsert_chats_ok'; count: number }
+  | { type: 'upsert_messages_ok' }
   | { type: 'upsert_folder_ok'; folder: Folder }
   | { type: 'assign_folder_ok' }
   | { type: 'delete_folder_ok' }
+  | { type: 'upsert_tag_ok'; tag: Tag }
+  | { type: 'assign_tags_ok' }
+  | { type: 'delete_tag_ok' }
+  | { type: 'list_tags_ok'; tags: Tag[] }
   | { type: 'search_chats_ok'; hits: SearchHit[]; titlesOnly: true }
   | { type: 'list_folders_ok'; folders: Folder[] }
+  | { type: 'start_bulk_delete_ok' }
+  | { type: 'get_bulk_status_ok'; status: BulkStatus }
+  | { type: 'execute_delete_ok' }
+  | { type: 'execute_delete_error'; error: string }
   | { type: 'fetch_conversations_ok'; results: FetchedConversation[] };
