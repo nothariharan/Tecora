@@ -1,11 +1,14 @@
 import { db } from '@/src/core/db';
 import { deriveChatPreview, deriveChatTitle } from '@/src/core/memory';
+import { estimateChatUsage, usageLabel, type ChatUsageEstimate } from '@/src/core/usage';
 import type { Chat, Message } from '@/src/core/types';
 import { useLiveQuery } from './useLiveQuery';
 
 export interface ChatPresentation {
   title: string;
   preview: string | null;
+  usage: ChatUsageEstimate;
+  usageWarning: string | null;
 }
 
 export function useChatPresentations(chats: Chat[]): Record<string, ChatPresentation> {
@@ -28,9 +31,12 @@ export function useChatPresentations(chats: Chat[]): Record<string, ChatPresenta
         const presentations: Record<string, ChatPresentation> = {};
         for (const chat of chats) {
           const chatMessages = byChatPk.get(chat.pk) ?? [];
+          const usage = estimateChatUsage(chatMessages);
           presentations[chat.pk] = {
             title: deriveChatTitle(chat, chatMessages),
             preview: deriveChatPreview(chatMessages),
+            usage,
+            usageWarning: usageLabel(usage),
           };
         }
         return presentations;

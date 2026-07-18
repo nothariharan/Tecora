@@ -12,6 +12,7 @@ interface Props {
   tags: Tag[];
   displayTitle?: string;
   preview?: string | null;
+  usageWarning?: string | null;
   editMode?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
@@ -33,6 +34,7 @@ export function ChatItem({
   tags,
   displayTitle,
   preview,
+  usageWarning,
   editMode = false,
   selected = false,
   onToggleSelect,
@@ -181,6 +183,20 @@ export function ChatItem({
             whiteSpace: 'nowrap',
           }}>
             {preview}
+          </div>
+        )}
+
+        {usageWarning && (
+          <div style={{
+            alignSelf: 'flex-start',
+            fontSize: 10.5,
+            color: T.danger,
+            background: T.dangerBg,
+            border: `1px solid ${T.border}`,
+            borderRadius: 4,
+            padding: '1px 6px',
+          }}>
+            {usageWarning} · consider starting fresh
           </div>
         )}
 

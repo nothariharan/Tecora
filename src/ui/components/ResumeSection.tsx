@@ -97,6 +97,15 @@ export function ResumeSection({
                   {presentation.preview}
                 </div>
               )}
+              {presentation?.usageWarning && (
+                <div style={{
+                  marginTop: 4,
+                  fontSize: 10.5,
+                  color: T.danger,
+                }}>
+                  {presentation.usageWarning} · start fresh if replies feel slow
+                </div>
+              )}
             </button>
           );
         })}

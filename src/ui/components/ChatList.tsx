@@ -50,6 +50,7 @@ export function ChatList({
           tags={tags}
           displayTitle={presentations[chat.pk]?.title}
           preview={presentations[chat.pk]?.preview}
+          usageWarning={presentations[chat.pk]?.usageWarning}
           editMode={editMode}
           selected={selectedChatPks.has(chat.pk)}
           onToggleSelect={() => onToggleSelectChat?.(chat.pk)}

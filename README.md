@@ -17,6 +17,7 @@ v0.1 - usable across all three platforms with a minimal black/white UI.
 - Memory layer with pinned chats, derived titles/previews, and a "continue where you left off" section.
 - Portable archive export/import: JSON backups restore chats, messages, folders, and tags.
 - Privacy and activity controls: per-platform message capture toggles, recent local activity, and wipe-all-data.
+- Usage awareness: local rolling-window activity estimates and long-chat warnings without pretending to know exact platform quota.
 - MiniSearch index for titles plus captured message text.
 - `ctrl/cmd+k` command palette on supported pages through a Shadow DOM overlay.
 - Remote selector config for delete UI resilience.
@@ -101,6 +102,12 @@ node scripts/extension-smoke.mjs
 - Turning capture off removes stored message text for that platform and keeps future capture to titles/metadata.
 - Recent local activity shows imports, exports, pins, privacy changes, and bulk delete starts.
 - Wipe all Tecora data clears local chats, messages, folders, tags, activity log, settings, and queue state.
+
+**Usage awareness**
+
+- Usage awareness is a local estimate based only on captured message activity.
+- Tecora does not show exact "messages remaining" counts unless a platform exposes them.
+- Long-chat badges use approximate local token counts and suggest starting fresh when a chat gets heavy.
 
 **Export, archive, import, and bulk delete**
 

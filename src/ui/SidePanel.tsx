@@ -11,12 +11,14 @@ import { TagList } from './components/TagList';
 import { ChatList } from './components/ChatList';
 import { ResumeSection } from './components/ResumeSection';
 import { PrivacyActivityPanel } from './components/PrivacyActivityPanel';
+import { UsageAwarenessPanel } from './components/UsageAwarenessPanel';
 import { useExporter } from './export-actions';
 import { ExportProvider } from './ExportContext';
 import { T } from './theme';
 import type { BulkStatus } from '@/src/core/bus';
 import { sortMemoryChats } from '@/src/core/memory';
 import { useChatPresentations } from './hooks/useChatPresentations';
+import { useUsageAwareness } from './hooks/useUsageAwareness';
 
 type ScopeMode = 'active' | 'all';
 
@@ -38,6 +40,7 @@ export function SidePanel() {
 
   const allChats = sortMemoryChats(useChats(scopedPlatform, scopedAccount, null, null, ''));
   const presentations = useChatPresentations(allChats);
+  const usageEstimates = useUsageAwareness(allChats);
 
   const filteredChats = useMemo(() => {
     let list = allChats;
@@ -261,6 +264,10 @@ export function SidePanel() {
             {filteredChats.length} chat{filteredChats.length === 1 ? '' : 's'}
           </span>
         </div>
+
+        {!editMode && !query.trim() && (
+          <UsageAwarenessPanel estimates={usageEstimates} />
+        )}
 
         {!editMode && !query.trim() && selectedFolderId === null && selectedTagId === null && (
           <ResumeSection
