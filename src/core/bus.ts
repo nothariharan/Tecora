@@ -1,12 +1,13 @@
-// all cross-world messages live here so nothing turns into random string checks
+// All cross-world messages live here so nothing turns into random string checks.
 //
-//   L0 (page)  →  L1 (content)     window.postMessage
-//   L1           ↔  L2 (background)  runtime.sendMessage
+//   L0 (page)  ->  L1 (content)     window.postMessage
+//   L1         <-> L2 (background)  runtime.sendMessage
 
 import type { Chat, Folder, Message, Platform, Tag } from './types';
 import type { SearchHit } from './search';
+import type { PortableArchive } from './export';
 
-// pages spam postMessage for all kinds of stuff — this key is how we filter ours
+// Pages spam postMessage for all kinds of stuff; this key is how we filter ours.
 export const PAGE_MSG_KEY = '__tecora__';
 
 export type PageMessage =
@@ -50,7 +51,7 @@ export interface BulkStatus {
   status: 'idle' | 'running' | 'completed' | 'failed' | 'paused';
 }
 
-// L1 → L2
+// L1 -> L2
 export type RuntimeRequest =
   | { type: 'ping'; platform: string; at: number }
   | { type: 'upsert_chats'; chats: Chat[] }
@@ -73,10 +74,11 @@ export type RuntimeRequest =
   | { type: 'start_bulk_delete'; chatPks: string[] }
   | { type: 'get_bulk_status' }
   | { type: 'execute_delete'; chatPk: string }
-  // side panel → content script (targeted tabs.sendMessage). fetches full
+  // side panel -> content script (targeted tabs.sendMessage). fetches full
   // conversation bodies in the page's authed context.
   | { type: 'fetch_conversations'; orgId: string; chatIds: string[] }
-  | { type: 'get_stored_messages'; chatPks: string[] };
+  | { type: 'get_stored_messages'; chatPks: string[] }
+  | { type: 'import_archive'; archive: PortableArchive };
 
 // per-chat result of a fetch_conversations request
 export interface FetchedConversation {
@@ -85,7 +87,7 @@ export interface FetchedConversation {
   error?: string;
 }
 
-// L2 → L1
+// L2 -> L1
 export type RuntimeResponse =
   | { type: 'pong'; at: number }
   | { type: 'upsert_chats_ok'; count: number }
@@ -104,4 +106,5 @@ export type RuntimeResponse =
   | { type: 'execute_delete_ok' }
   | { type: 'execute_delete_error'; error: string }
   | { type: 'fetch_conversations_ok'; results: FetchedConversation[] }
-  | { type: 'get_stored_messages_ok'; byChatPk: Record<string, Message[]> };
+  | { type: 'get_stored_messages_ok'; byChatPk: Record<string, Message[]> }
+  | { type: 'import_archive_ok'; chats: number; messages: number };

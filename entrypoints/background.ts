@@ -8,6 +8,7 @@ import {
 } from '@/src/core/search';
 import type MiniSearch from 'minisearch';
 import { fetchRemoteConfig } from '@/src/core/config';
+import { isPortableArchive } from '@/src/core/export';
 
 // rebuilt from dexie whenever the worker wakes cold — never trust in-memory alone
 let chatIndex: MiniSearch<SearchHit> | null = null;
@@ -231,6 +232,39 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
         byChatPk[chatPk] = messages;
       }
       return { type: 'get_stored_messages_ok', byChatPk };
+    }
+
+    case 'import_archive': {
+      if (!isPortableArchive(msg.archive)) {
+        throw new Error('Invalid Tecora portable archive');
+      }
+
+      const chats = msg.archive.chats.map((entry) => entry.chat);
+      const messages = msg.archive.chats.flatMap((entry) => entry.messages);
+
+      await db.transaction('rw', db.chats, db.messages, async () => {
+        await db.chats.bulkPut(chats);
+        for (const chat of chats) {
+          await db.messages.where('chatPk').equals(chat.pk).delete();
+        }
+        if (messages.length > 0) {
+          await db.messages.bulkPut(messages);
+        }
+      });
+
+      const latest = [...chats].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      if (latest) {
+        await browser.storage.session.set({
+          activePlatform: latest.platform,
+          activeAccount: latest.account,
+        });
+      }
+
+      indexReady = null;
+      chatIndex = null;
+      await ensureIndex();
+
+      return { type: 'import_archive_ok', chats: chats.length, messages: messages.length };
     }
 
     case 'list_folders': {

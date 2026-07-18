@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { bulkToMarkdown, chatToMarkdown, portableArchive, slugify } from './export';
+import {
+  bulkToMarkdown,
+  chatToMarkdown,
+  isPortableArchive,
+  portableArchive,
+  slugify,
+} from './export';
 import type { Chat, Message } from './types';
 
 const chat: Chat = {
@@ -62,5 +68,17 @@ describe('export markdown', () => {
     });
     expect(archive.chats[0]?.chat).toEqual(chat);
     expect(archive.chats[0]?.messages).toEqual(messages);
+    expect(isPortableArchive(archive)).toBe(true);
+  });
+
+  it('rejects malformed portable archives', () => {
+    expect(isPortableArchive({ tecora_export: 1, export_type: 'portable_archive' })).toBe(false);
+    expect(
+      isPortableArchive({
+        tecora_export: 1,
+        export_type: 'portable_archive',
+        chats: [{ chat, messages: [{ pk: 'bad', chatPk: 'other', role: 'user', text: 'x', ts: 1 }] }],
+      }),
+    ).toBe(false);
   });
 });

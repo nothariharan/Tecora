@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import type { Chat, Platform } from '@/src/core/types';
 import { useExport } from '../ExportContext';
 import { HelpButton } from './HelpButton';
 import { IconExport } from './Icons';
 import { T } from '../theme';
+import { isPortableArchive } from '@/src/core/export';
+import type { RuntimeRequest, RuntimeResponse } from '@/src/core/bus';
 
 const PLATFORM_LABEL: Record<Platform, string> = {
   claude: 'Claude',
@@ -20,6 +22,65 @@ interface Props {
 
 export function Header({ platform, allChats, editMode, setEditMode }: Props) {
   const { busy, exportChats } = useExport();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  const headerButtonStyle = (disabled = false): React.CSSProperties => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    fontSize: 11.5,
+    fontWeight: 500,
+    color: T.muted,
+    background: 'transparent',
+    border: `1px solid ${T.borderStrong}`,
+    borderRadius: T.radius,
+    padding: '3px 9px 3px 7px',
+    cursor: disabled ? 'default' : 'pointer',
+    opacity: disabled ? 0.5 : 1,
+  });
+
+  const liftButton = (e: React.MouseEvent<HTMLButtonElement>, disabled = false) => {
+    if (disabled) return;
+    e.currentTarget.style.background = T.hover;
+    e.currentTarget.style.color = T.fg;
+  };
+
+  const resetButton = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.background = 'transparent';
+    e.currentTarget.style.color = T.muted;
+  };
+
+  async function importArchiveFile(file: File) {
+    setImporting(true);
+    try {
+      const raw = await file.text();
+      const parsed: unknown = JSON.parse(raw);
+      if (!isPortableArchive(parsed)) {
+        window.alert('That file is not a valid Tecora portable archive.');
+        return;
+      }
+
+      const res = (await browser.runtime.sendMessage({
+        type: 'import_archive',
+        archive: parsed,
+      } satisfies RuntimeRequest)) as RuntimeResponse;
+
+      if (res.type === 'import_archive_ok') {
+        window.alert(
+          `Imported ${res.chats} chat${res.chats === 1 ? '' : 's'} and ${res.messages} message${res.messages === 1 ? '' : 's'}.`,
+        );
+      }
+    } catch (err) {
+      window.alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  const importDisabled = busy || editMode || importing;
+  const exportDisabled = busy || editMode;
 
   return (
     <div style={{
@@ -43,6 +104,7 @@ export function Header({ platform, allChats, editMode, setEditMode }: Props) {
         </span>
         <HelpButton />
       </span>
+
       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {allChats.length > 0 && (
           <>
@@ -64,52 +126,53 @@ export function Header({ platform, allChats, editMode, setEditMode }: Props) {
             </button>
             <button
               type="button"
-              disabled={busy || editMode}
+              disabled={exportDisabled}
               onClick={() => exportChats(allChats, 'all-chats')}
               title="Export every chat as one markdown file"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                fontSize: 11.5,
-                fontWeight: 500,
-                color: T.muted,
-                background: 'transparent',
-                border: `1px solid ${T.borderStrong}`,
-                borderRadius: T.radius,
-                padding: '3px 9px 3px 7px',
-                cursor: busy || editMode ? 'default' : 'pointer',
-                opacity: busy || editMode ? 0.5 : 1,
-              }}
-              onMouseEnter={(e) => { if (!busy && !editMode) { e.currentTarget.style.background = T.hover; e.currentTarget.style.color = T.fg; } }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = T.muted; }}
+              style={headerButtonStyle(exportDisabled)}
+              onMouseEnter={(e) => liftButton(e, exportDisabled)}
+              onMouseLeave={resetButton}
             >
               <IconExport size={13} />
               Export all
             </button>
             <button
               type="button"
-              disabled={busy || editMode}
+              disabled={exportDisabled}
               onClick={() => exportChats(allChats, 'all-chats', false, 'archive')}
               title="Export every chat as a portable JSON archive"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                fontSize: 11.5,
-                fontWeight: 500,
-                color: T.muted,
-                background: 'transparent',
-                border: `1px solid ${T.borderStrong}`,
-                borderRadius: T.radius,
-                padding: '3px 9px 3px 7px',
-                cursor: busy || editMode ? 'default' : 'pointer',
-                opacity: busy || editMode ? 0.5 : 1,
-              }}
-              onMouseEnter={(e) => { if (!busy && !editMode) { e.currentTarget.style.background = T.hover; e.currentTarget.style.color = T.fg; } }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = T.muted; }}
+              style={headerButtonStyle(exportDisabled)}
+              onMouseEnter={(e) => liftButton(e, exportDisabled)}
+              onMouseLeave={resetButton}
             >
               <IconExport size={13} />
               Archive
             </button>
           </>
         )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.currentTarget.files?.[0];
+            if (file) void importArchiveFile(file);
+          }}
+        />
+        <button
+          type="button"
+          disabled={importDisabled}
+          onClick={() => fileInputRef.current?.click()}
+          title="Import a Tecora portable JSON archive"
+          style={headerButtonStyle(importDisabled)}
+          onMouseEnter={(e) => liftButton(e, importDisabled)}
+          onMouseLeave={resetButton}
+        >
+          {importing ? 'Importing...' : 'Import'}
+        </button>
+
         {platform && (
           <span style={{
             fontSize: 11,

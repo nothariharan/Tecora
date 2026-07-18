@@ -88,6 +88,57 @@ export interface PortableArchive {
   }>;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isPlatform(value: unknown): value is Platform {
+  return value === 'claude' || value === 'chatgpt' || value === 'gemini';
+}
+
+function isChat(value: unknown): value is Chat {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['pk'] === 'string' &&
+    isPlatform(value['platform']) &&
+    typeof value['account'] === 'string' &&
+    typeof value['chatId'] === 'string' &&
+    typeof value['title'] === 'string' &&
+    typeof value['updatedAt'] === 'number'
+  );
+}
+
+function isMessage(value: unknown): value is Message {
+  if (!isRecord(value)) return false;
+  const role = value['role'];
+  return (
+    typeof value['pk'] === 'string' &&
+    typeof value['chatPk'] === 'string' &&
+    (role === 'user' || role === 'assistant' || role === 'system') &&
+    typeof value['text'] === 'string' &&
+    typeof value['ts'] === 'number'
+  );
+}
+
+export function isPortableArchive(value: unknown): value is PortableArchive {
+  if (!isRecord(value)) return false;
+  if (value['tecora_export'] !== 1 || value['export_type'] !== 'portable_archive') {
+    return false;
+  }
+  const chats = value['chats'];
+  if (!Array.isArray(chats)) return false;
+  return chats.every((entry) => {
+    if (!isRecord(entry) || !isChat(entry['chat']) || !Array.isArray(entry['messages'])) {
+      return false;
+    }
+    const chat = entry['chat'];
+    return entry['messages'].every((message) => {
+      if (!isMessage(message)) return false;
+      return message.chatPk === chat.pk;
+    });
+  });
+}
+
 export function portableArchive(entries: BulkEntry[]): PortableArchive {
   return {
     tecora_export: 1,
