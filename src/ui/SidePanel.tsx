@@ -9,16 +9,22 @@ import { SearchBar } from './components/SearchBar';
 import { FolderList } from './components/FolderList';
 import { TagList } from './components/TagList';
 import { ChatList } from './components/ChatList';
+import { ResumeSection } from './components/ResumeSection';
 import { useExporter } from './export-actions';
 import { ExportProvider } from './ExportContext';
 import { T } from './theme';
 import type { BulkStatus } from '@/src/core/bus';
+import { sortMemoryChats } from '@/src/core/memory';
+import { useChatPresentations } from './hooks/useChatPresentations';
+
+type ScopeMode = 'active' | 'all';
 
 export function SidePanel() {
   const active = useActivePlatform();
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [scopeMode, setScopeMode] = useState<ScopeMode>('active');
 
   const [editMode, setEditMode] = useState(false);
   const [selectedChatPks, setSelectedChatPks] = useState<Set<string>>(new Set());
@@ -26,8 +32,11 @@ export function SidePanel() {
 
   const platform = active?.platform ?? null;
   const account = active?.account ?? null;
+  const scopedPlatform = scopeMode === 'active' ? platform : null;
+  const scopedAccount = scopeMode === 'active' ? account : null;
 
-  const allChats = useChats(platform, account, null, null, '');
+  const allChats = sortMemoryChats(useChats(scopedPlatform, scopedAccount, null, null, ''));
+  const presentations = useChatPresentations(allChats);
 
   const filteredChats = useMemo(() => {
     let list = allChats;
@@ -41,13 +50,20 @@ export function SidePanel() {
     }
     if (query.trim()) {
       const q = query.toLowerCase();
-      list = list.filter((c) => c.title.toLowerCase().includes(q));
+      list = list.filter((c) => {
+        const presentation = presentations[c.pk];
+        return (
+          c.title.toLowerCase().includes(q) ||
+          presentation?.title.toLowerCase().includes(q) ||
+          presentation?.preview?.toLowerCase().includes(q)
+        );
+      });
     }
-    return list;
-  }, [allChats, selectedFolderId, selectedTagId, query]);
+    return sortMemoryChats(list);
+  }, [allChats, selectedFolderId, selectedTagId, query, presentations]);
 
-  const folders = useFolders(platform, account);
-  const tags = useTags(platform, account);
+  const folders = useFolders(scopedPlatform, scopedAccount);
+  const tags = useTags(scopedPlatform, scopedAccount);
 
   const { busy, progress, error, exportChats } = useExporter();
 
@@ -86,6 +102,14 @@ export function SidePanel() {
 
   const clearSelection = () => {
     setSelectedChatPks(new Set());
+  };
+
+  const switchScope = (next: ScopeMode) => {
+    setScopeMode(next);
+    setSelectedFolderId(null);
+    setSelectedTagId(null);
+    setSelectedChatPks(new Set());
+    setEditMode(false);
   };
 
   const exportSelected = () => {
@@ -199,6 +223,50 @@ export function SidePanel() {
 
         <SearchBar value={query} onChange={setQuery} />
 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 12px',
+          borderBottom: `1px solid ${T.border}`,
+          gap: 8,
+        }}>
+          <span style={{ display: 'flex', gap: 6 }}>
+            {(['active', 'all'] as ScopeMode[]).map((mode) => {
+              const activeMode = scopeMode === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => switchScope(mode)}
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    color: activeMode ? T.bg : T.muted,
+                    background: activeMode ? T.fg : 'transparent',
+                    border: `1px solid ${activeMode ? T.fg : T.borderStrong}`,
+                    borderRadius: T.radius,
+                    padding: '3px 8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {mode === 'active' ? 'Current account' : 'All platforms'}
+                </button>
+              );
+            })}
+          </span>
+          <span style={{ fontSize: 11, color: T.faint }}>
+            {filteredChats.length} chat{filteredChats.length === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        {!editMode && !query.trim() && selectedFolderId === null && selectedTagId === null && (
+          <ResumeSection
+            chats={allChats.slice(0, 3)}
+            presentations={presentations}
+          />
+        )}
+
         {editMode && (
           <div style={{
             display: 'flex',
@@ -220,7 +288,7 @@ export function SidePanel() {
           </div>
         )}
 
-        {!editMode && platform && account && (
+        {!editMode && scopedPlatform && scopedAccount && (
           <>
             <FolderList
               folders={folders}
@@ -230,8 +298,8 @@ export function SidePanel() {
                 setSelectedFolderId(fid);
                 setSelectedTagId(null);
               }}
-              platform={platform}
-              account={account}
+              platform={scopedPlatform}
+              account={scopedAccount}
             />
             <TagList
               tags={tags}
@@ -241,8 +309,8 @@ export function SidePanel() {
                 setSelectedTagId(tid);
                 setSelectedFolderId(null);
               }}
-              platform={platform}
-              account={account}
+              platform={scopedPlatform}
+              account={scopedAccount}
             />
           </>
         )}
@@ -251,6 +319,7 @@ export function SidePanel() {
           chats={filteredChats}
           folders={folders}
           tags={tags}
+          presentations={presentations}
           editMode={editMode}
           selectedChatPks={selectedChatPks}
           onToggleSelectChat={toggleSelectChat}

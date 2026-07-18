@@ -14,6 +14,7 @@ v0.1 - usable across all three platforms with a minimal black/white UI.
 - Adapters normalize platform data into shared `Chat` / `Message` types.
 - Dexie stores chats, messages, folders, and tags through the service worker.
 - Side panel for browsing, folders, tags, select/export, archive import/export, and bulk delete.
+- Memory layer with pinned chats, derived titles/previews, and a "continue where you left off" section.
 - Portable archive export/import: JSON backups restore chats, messages, folders, and tags.
 - MiniSearch index for titles plus captured message text.
 - `ctrl/cmd+k` command palette on supported pages through a Shadow DOM overlay.
@@ -82,8 +83,16 @@ node scripts/extension-smoke.mjs
 **Search**
 
 - Side panel search filters by title.
+- Switch to All platforms to search and resume across Claude, ChatGPT, and Gemini.
 - On a platform page, `ctrl/cmd+k` opens the palette.
 - Arrow keys move, Enter opens, Escape closes.
+
+**Memory layer**
+
+- The side panel shows a "Continue where you left off" section from the latest local chats.
+- Generic titles such as "New chat" get local derived titles from captured messages.
+- Chat rows show a one-line recall preview when message content has been captured.
+- Pin important chats from the chat menu to keep them at the top.
 
 **Export, archive, import, and bulk delete**
 

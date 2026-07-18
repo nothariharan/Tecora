@@ -107,6 +107,15 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
       return { type: 'upsert_messages_ok' };
     }
 
+    case 'set_pinned':
+      await db.chats.update(msg.chatPk, { pinned: msg.pinned });
+      await ensureIndex();
+      if (chatIndex) {
+        const chat = await db.chats.get(msg.chatPk);
+        if (chat) upsertChatsIntoIndex(chatIndex, [chat]);
+      }
+      return { type: 'set_pinned_ok' };
+
     case 'upsert_folder':
       await db.folders.put(msg.folder);
       return { type: 'upsert_folder_ok', folder: msg.folder };

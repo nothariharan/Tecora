@@ -56,6 +56,7 @@ export type RuntimeRequest =
   | { type: 'ping'; platform: string; at: number }
   | { type: 'upsert_chats'; chats: Chat[] }
   | { type: 'upsert_messages'; chatPk: string; messages: Message[] }
+  | { type: 'set_pinned'; chatPk: string; pinned: boolean }
   | { type: 'upsert_folder'; folder: Folder }
   | { type: 'assign_folder'; chatPk: string; folderId: string | null }
   | { type: 'delete_folder'; folderId: string }
@@ -92,6 +93,7 @@ export type RuntimeResponse =
   | { type: 'pong'; at: number }
   | { type: 'upsert_chats_ok'; count: number }
   | { type: 'upsert_messages_ok' }
+  | { type: 'set_pinned_ok' }
   | { type: 'upsert_folder_ok'; folder: Folder }
   | { type: 'assign_folder_ok' }
   | { type: 'delete_folder_ok' }

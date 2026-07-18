@@ -10,6 +10,8 @@ interface Props {
   chat: Chat;
   folders: Folder[];
   tags: Tag[];
+  displayTitle?: string;
+  preview?: string | null;
   editMode?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
@@ -25,7 +27,16 @@ function relativeTime(ts: number): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-export function ChatItem({ chat, folders, tags, editMode = false, selected = false, onToggleSelect }: Props) {
+export function ChatItem({
+  chat,
+  folders,
+  tags,
+  displayTitle,
+  preview,
+  editMode = false,
+  selected = false,
+  onToggleSelect,
+}: Props) {
   const [showMenu, setShowMenu] = useState(false);
   const [hover, setHover] = useState(false);
   const { busy, exportChats } = useExport();
@@ -49,6 +60,15 @@ export function ChatItem({ chat, folders, tags, editMode = false, selected = fal
       type: 'assign_tags',
       chatPk: chat.pk,
       tagIds: newTags,
+    } satisfies RuntimeRequest);
+  }
+
+  async function setPinned(pinned: boolean) {
+    setShowMenu(false);
+    await browser.runtime.sendMessage({
+      type: 'set_pinned',
+      chatPk: chat.pk,
+      pinned,
     } satisfies RuntimeRequest);
   }
 
@@ -126,7 +146,7 @@ export function ChatItem({ chat, folders, tags, editMode = false, selected = fal
             whiteSpace: 'nowrap',
             flex: 1,
           }}>
-            {chat.title}
+            {chat.pinned ? '★ ' : ''}{displayTitle ?? chat.title}
           </span>
           {hover || showMenu ? (
             <button
@@ -150,6 +170,19 @@ export function ChatItem({ chat, folders, tags, editMode = false, selected = fal
             </span>
           )}
         </div>
+
+        {preview && (
+          <div style={{
+            fontSize: 11,
+            lineHeight: 1.35,
+            color: T.faint,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {preview}
+          </div>
+        )}
 
         {(currentFolder || (chat.tagIds && chat.tagIds.length > 0)) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
@@ -224,6 +257,20 @@ export function ChatItem({ chat, folders, tags, editMode = false, selected = fal
             >
               <IconExport size={14} style={{ color: T.icon }} />
               Export portable archive
+            </div>
+
+            <div style={{ height: 1, background: T.border, margin: '4px 0' }} />
+
+            <div
+              onClick={() => setPinned(!chat.pinned)}
+              style={menuItem}
+              onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <span style={{ width: 14, flexShrink: 0, color: T.icon }}>
+                {chat.pinned ? '★' : '☆'}
+              </span>
+              {chat.pinned ? 'Unpin from top' : 'Pin to top'}
             </div>
 
             <div style={{ height: 1, background: T.border, margin: '4px 0' }} />
