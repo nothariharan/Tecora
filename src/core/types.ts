@@ -39,6 +39,24 @@ export interface Tag {
   name: string;
 }
 
+export interface ActivityLogEntry {
+  id: string;
+  at: number;
+  action:
+    | 'export_markdown'
+    | 'export_archive'
+    | 'import_archive'
+    | 'set_pinned'
+    | 'bulk_delete_started'
+    | 'privacy_settings_updated'
+    | 'wipe_all_data';
+  detail: string;
+}
+
+export interface PrivacySettings {
+  captureMessages: Record<Platform, boolean>;
+}
+
 // adapter self-test result. destructive stuff only runs on green.
 export type HealthState =
   | { level: 'green' }

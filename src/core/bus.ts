@@ -3,7 +3,7 @@
 //   L0 (page)  ->  L1 (content)     window.postMessage
 //   L1         <-> L2 (background)  runtime.sendMessage
 
-import type { Chat, Folder, Message, Platform, Tag } from './types';
+import type { ActivityLogEntry, Chat, Folder, Message, Platform, PrivacySettings, Tag } from './types';
 import type { SearchHit } from './search';
 import type { PortableArchive } from './export';
 
@@ -74,6 +74,11 @@ export type RuntimeRequest =
   | { type: 'list_folders'; platform: Platform; account: string }
   | { type: 'start_bulk_delete'; chatPks: string[] }
   | { type: 'get_bulk_status' }
+  | { type: 'get_privacy_settings' }
+  | { type: 'set_privacy_settings'; settings: PrivacySettings }
+  | { type: 'log_activity'; action: ActivityLogEntry['action']; detail: string }
+  | { type: 'list_activity'; limit?: number }
+  | { type: 'wipe_all_data' }
   | { type: 'execute_delete'; chatPk: string }
   // side panel -> content script (targeted tabs.sendMessage). fetches full
   // conversation bodies in the page's authed context.
@@ -105,6 +110,11 @@ export type RuntimeResponse =
   | { type: 'list_folders_ok'; folders: Folder[] }
   | { type: 'start_bulk_delete_ok' }
   | { type: 'get_bulk_status_ok'; status: BulkStatus }
+  | { type: 'get_privacy_settings_ok'; settings: PrivacySettings }
+  | { type: 'set_privacy_settings_ok'; settings: PrivacySettings }
+  | { type: 'log_activity_ok' }
+  | { type: 'list_activity_ok'; entries: ActivityLogEntry[] }
+  | { type: 'wipe_all_data_ok' }
   | { type: 'execute_delete_ok' }
   | { type: 'execute_delete_error'; error: string }
   | { type: 'fetch_conversations_ok'; results: FetchedConversation[] }

@@ -16,6 +16,7 @@ v0.1 - usable across all three platforms with a minimal black/white UI.
 - Side panel for browsing, folders, tags, select/export, archive import/export, and bulk delete.
 - Memory layer with pinned chats, derived titles/previews, and a "continue where you left off" section.
 - Portable archive export/import: JSON backups restore chats, messages, folders, and tags.
+- Privacy and activity controls: per-platform message capture toggles, recent local activity, and wipe-all-data.
 - MiniSearch index for titles plus captured message text.
 - `ctrl/cmd+k` command palette on supported pages through a Shadow DOM overlay.
 - Remote selector config for delete UI resilience.
@@ -93,6 +94,13 @@ node scripts/extension-smoke.mjs
 - Generic titles such as "New chat" get local derived titles from captured messages.
 - Chat rows show a one-line recall preview when message content has been captured.
 - Pin important chats from the chat menu to keep them at the top.
+
+**Privacy and activity**
+
+- Expand Privacy & activity to toggle message-content capture per platform.
+- Turning capture off removes stored message text for that platform and keeps future capture to titles/metadata.
+- Recent local activity shows imports, exports, pins, privacy changes, and bulk delete starts.
+- Wipe all Tecora data clears local chats, messages, folders, tags, activity log, settings, and queue state.
 
 **Export, archive, import, and bulk delete**
 

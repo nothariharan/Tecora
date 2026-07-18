@@ -9,11 +9,17 @@ import {
 import type MiniSearch from 'minisearch';
 import { fetchRemoteConfig } from '@/src/core/config';
 import { isPortableArchive } from '@/src/core/export';
+import {
+  normalizePrivacySettings,
+  platformFromChatPk,
+} from '@/src/core/privacy';
+import type { ActivityLogEntry, PrivacySettings } from '@/src/core/types';
 
 // rebuilt from dexie whenever the worker wakes cold — never trust in-memory alone
 let chatIndex: MiniSearch<SearchHit> | null = null;
 let indexReady: Promise<void> | null = null;
 let isProcessingQueue = false;
+const PRIVACY_SETTINGS_KEY = 'tecora_privacy_settings';
 
 export default defineBackground(() => {
   restoreSessionContext();
@@ -57,6 +63,50 @@ function ensureIndex(): Promise<void> {
   return indexReady;
 }
 
+function entryId(): string {
+  return `log:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+}
+
+async function logActivity(action: ActivityLogEntry['action'], detail: string) {
+  await db.activityLog.put({
+    id: entryId(),
+    at: Date.now(),
+    action,
+    detail,
+  });
+}
+
+async function getPrivacySettings(): Promise<PrivacySettings> {
+  const data = await browser.storage.local.get(PRIVACY_SETTINGS_KEY);
+  return normalizePrivacySettings(data[PRIVACY_SETTINGS_KEY]);
+}
+
+async function setPrivacySettings(settings: PrivacySettings): Promise<PrivacySettings> {
+  const normalized = normalizePrivacySettings(settings);
+  await browser.storage.local.set({ [PRIVACY_SETTINGS_KEY]: normalized });
+
+  const disabledPlatforms = Object.entries(normalized.captureMessages)
+    .filter(([, enabled]) => !enabled)
+    .map(([platform]) => platform);
+
+  if (disabledPlatforms.length > 0) {
+    await db.transaction('rw', db.messages, async () => {
+      for (const platform of disabledPlatforms) {
+        const prefix = `${platform}:`;
+        await db.messages
+          .filter((message) => message.chatPk.startsWith(prefix))
+          .delete();
+      }
+    });
+    indexReady = null;
+    chatIndex = null;
+    await ensureIndex();
+  }
+
+  await logActivity('privacy_settings_updated', 'Updated message-content capture settings');
+  return normalized;
+}
+
 async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
   switch (msg.type) {
     case 'ping':
@@ -93,6 +143,16 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
     }
 
     case 'upsert_messages': {
+      const platform = platformFromChatPk(msg.chatPk);
+      const privacy = await getPrivacySettings();
+      if (platform && !privacy.captureMessages[platform]) {
+        await db.messages.where('chatPk').equals(msg.chatPk).delete();
+        indexReady = null;
+        chatIndex = null;
+        await ensureIndex();
+        return { type: 'upsert_messages_ok' };
+      }
+
       await db.transaction('rw', db.messages, db.chats, async () => {
         await db.messages.where('chatPk').equals(msg.chatPk).delete();
         await db.messages.bulkPut(msg.messages);
@@ -109,6 +169,10 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
 
     case 'set_pinned':
       await db.chats.update(msg.chatPk, { pinned: msg.pinned });
+      await logActivity(
+        'set_pinned',
+        `${msg.pinned ? 'Pinned' : 'Unpinned'} ${msg.chatPk}`,
+      );
       await ensureIndex();
       if (chatIndex) {
         const chat = await db.chats.get(msg.chatPk);
@@ -280,6 +344,10 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
       indexReady = null;
       chatIndex = null;
       await ensureIndex();
+      await logActivity(
+        'import_archive',
+        `Imported ${chats.length} chats, ${messages.length} messages, ${folders.length} folders, ${tags.length} tags`,
+      );
 
       return {
         type: 'import_archive_ok',
@@ -314,6 +382,7 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
         status: 'running',
       };
       await browser.storage.local.set({ tecora_bulk_queue: queue });
+      await logActivity('bulk_delete_started', `Started bulk delete for ${msg.chatPks.length} chats`);
       setTimeout(() => processNextQueueItem(), 500);
       return { type: 'start_bulk_delete_ok' };
     }
@@ -329,6 +398,57 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
         status: 'idle',
       };
       return { type: 'get_bulk_status_ok', status };
+    }
+
+    case 'get_privacy_settings': {
+      return {
+        type: 'get_privacy_settings_ok',
+        settings: await getPrivacySettings(),
+      };
+    }
+
+    case 'set_privacy_settings': {
+      const settings = await setPrivacySettings(msg.settings);
+      return { type: 'set_privacy_settings_ok', settings };
+    }
+
+    case 'log_activity':
+      await logActivity(msg.action, msg.detail);
+      return { type: 'log_activity_ok' };
+
+    case 'list_activity': {
+      const entries = await db.activityLog
+        .orderBy('at')
+        .reverse()
+        .limit(msg.limit ?? 20)
+        .toArray();
+      return { type: 'list_activity_ok', entries };
+    }
+
+    case 'wipe_all_data': {
+      await db.transaction(
+        'rw',
+        db.chats,
+        db.messages,
+        db.folders,
+        db.tags,
+        db.activityLog,
+        async () => {
+          await Promise.all([
+            db.chats.clear(),
+            db.messages.clear(),
+            db.folders.clear(),
+            db.tags.clear(),
+            db.activityLog.clear(),
+          ]);
+        },
+      );
+      await browser.storage.local.remove(['tecora_bulk_queue', PRIVACY_SETTINGS_KEY]);
+      await browser.storage.session.remove(['activePlatform', 'activeAccount']);
+      chatIndex = null;
+      indexReady = null;
+      await ensureIndex();
+      return { type: 'wipe_all_data_ok' };
     }
 
     case 'execute_delete':

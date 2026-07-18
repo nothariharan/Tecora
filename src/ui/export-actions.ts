@@ -93,6 +93,14 @@ async function fetchArchiveMetadata(
   return { folders, tags };
 }
 
+async function logActivity(action: 'export_markdown' | 'export_archive', detail: string) {
+  await browser.runtime.sendMessage({
+    type: 'log_activity',
+    action,
+    detail,
+  } satisfies RuntimeRequest);
+}
+
 export interface ExportProgress {
   done: number;
   total: number;
@@ -168,14 +176,17 @@ export function useExporter() {
         if (format === 'archive') {
           const metadata = await fetchArchiveMetadata(chats);
           downloadJson(archiveFilename(label), portableArchive(entries, metadata));
+          await logActivity('export_archive', `Exported archive "${label}" with ${chats.length} chats`);
         } else if (single && chats.length === 1) {
           const chat = chats[0]!;
           downloadText(
             singleFilename(chat),
             chatToMarkdown(chat, messagesByChatId.get(chat.chatId) ?? []),
           );
+          await logActivity('export_markdown', `Exported markdown for "${chat.title}"`);
         } else {
           downloadText(bulkFilename(label), bulkToMarkdown(entries, label));
+          await logActivity('export_markdown', `Exported markdown "${label}" with ${chats.length} chats`);
         }
 
         if (isMetadataOnly) {

@@ -10,6 +10,7 @@ import { FolderList } from './components/FolderList';
 import { TagList } from './components/TagList';
 import { ChatList } from './components/ChatList';
 import { ResumeSection } from './components/ResumeSection';
+import { PrivacyActivityPanel } from './components/PrivacyActivityPanel';
 import { useExporter } from './export-actions';
 import { ExportProvider } from './ExportContext';
 import { T } from './theme';
@@ -182,6 +183,7 @@ export function SidePanel() {
           hasData={allChats.length > 0}
           hasActiveAccount={Boolean(platform && account)}
         />
+        <PrivacyActivityPanel />
 
         {bulkQueue && bulkQueue.active && (
           <div style={{
