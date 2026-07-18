@@ -32,26 +32,26 @@ export const CHIP_STYLES = `
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    border: 1px solid #333333;
+    border: 1px solid #404040;
     background: #111111;
     color: #ffffff;
-    border-radius: 999px;
+    border-radius: 4px;
     padding: 8px 12px;
-    font: 600 12px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 500 12px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     letter-spacing: 0.02em;
     cursor: pointer;
   }
   .chip:hover { background: #000000; }
   .dot {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #ffffff;
   }
   .count {
     min-width: 1.4em;
     text-align: center;
-    color: #9ca3af;
+    color: #a3a3a3;
     font-weight: 500;
   }
 `;

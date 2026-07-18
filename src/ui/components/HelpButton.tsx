@@ -21,7 +21,7 @@ export function HelpButton() {
           width: 22,
           height: 22,
           padding: 0,
-          borderRadius: 6,
+          borderRadius: T.radius,
           border: 'none',
           background: open ? T.selectedBg : 'transparent',
           color: open ? T.fg : T.icon,
@@ -37,7 +37,7 @@ export function HelpButton() {
         <>
           <div
             onClick={() => setOpen(false)}
-            style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.4)' }}
+            style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.55)' }}
           />
           <div
             style={{
@@ -48,9 +48,8 @@ export function HelpButton() {
               maxHeight: 'calc(100vh - 60px)',
               overflowY: 'auto',
               background: T.bg,
-              border: `1px solid ${T.border}`,
+              border: `1px solid ${T.borderStrong}`,
               borderRadius: T.radius,
-              boxShadow: '0 12px 32px rgba(0,0,0,0.14)',
               padding: '14px 16px',
               zIndex: 41,
               fontSize: 12,
@@ -98,21 +97,21 @@ const SECTIONS = [
   {
     title: 'Capturing chats',
     body:
-      'Keep claude.ai open and logged in. Tecora reads your chat list straight from the page — no import needed. If it looks empty, open Claude and give it a few seconds.',
+      'Open Claude, ChatGPT, or Gemini logged in. Tecora reads the chat list from the page — no import. If the panel looks empty, refresh and wait a few seconds.',
   },
   {
-    title: 'Filing into folders',
+    title: 'Folders & tags',
     body:
-      'Make a folder with “New folder”. Then on any chat, open its ⋯ menu and pick a folder under “Move to folder”. Click a folder in the list to filter to just its chats.',
+      'Create a folder or tag, then use a chat’s ⋯ menu to assign it. Click a folder/tag to filter. Select mode (top-right) lets you export or delete many chats at once.',
   },
   {
     title: 'Exporting',
     body:
-      'A chat’s ⋯ menu → “Export as markdown” saves that conversation with full messages. Hover a folder → export icon bundles every chat in it. “Export all” (top-right) dumps everything into one file.',
+      '⋯ → “Export as markdown” for one chat, or Export all / Export N in select mode. Open a few chats first so message bodies are captured (especially on Gemini).',
   },
   {
     title: 'Search',
     body:
-      'Use the search box for titles, or press Ctrl/Cmd + K on claude.ai for the quick command palette.',
+      'Side panel search filters titles. Ctrl/Cmd+K opens the palette and searches titles plus any captured message text.',
   },
 ] as const;

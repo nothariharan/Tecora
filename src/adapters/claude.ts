@@ -200,9 +200,12 @@ export class ClaudeAdapter implements Adapter {
     }
 
     if (!confirmBtn) {
-      const allButtons = Array.from(document.querySelectorAll('button')) as HTMLElement[];
-      const found = allButtons.find((el) => el.textContent?.toLowerCase().includes('delete'));
-      if (found) confirmBtn = found;
+      const dialog = document.querySelector('[role="dialog"], [aria-modal="true"]');
+      if (dialog) {
+        const btns = Array.from(dialog.querySelectorAll('button')) as HTMLElement[];
+        confirmBtn =
+          btns.find((el) => el.textContent?.toLowerCase().includes('delete')) ?? null;
+      }
     }
 
     if (!confirmBtn) {

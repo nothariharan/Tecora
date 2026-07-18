@@ -1,30 +1,24 @@
-// one monochrome token set for the whole side panel. no blue, no gradient —
-// flat black / white / gray only. every component pulls its hex from here so
-// the look stays consistent and easy to retune.
-
-// dark token set, matched to the ctrl+k palette (#111 surface, light text,
-// #262626/#333 borders). every component pulls its hex from here so the side
-// panel and the palette read as one product.
+// pure black / white / gray. side panel + palette share this set.
 
 export const T = {
   bg: '#111111',
-  fg: '#f3f4f6',
-  muted: '#9ca3af',
-  faint: '#6b7280',
-  icon: '#8a8a93',
+  fg: '#ffffff',
+  muted: '#a3a3a3',
+  faint: '#737373',
+  icon: '#8a8a8a',
   border: '#262626',
-  borderStrong: '#333333',
-  hover: '#1c1c1c',
+  borderStrong: '#404040',
+  hover: '#1a1a1a',
   selectedBg: '#262626',
   selectedFg: '#ffffff',
-  pillBg: '#232323',
+  pillBg: '#1a1a1a',
   pillStrongBg: '#333333',
-  pillFg: '#9ca3af',
-  // neutral notice strip
+  pillFg: '#a3a3a3',
   noticeBg: '#1a1a1a',
-  noticeFg: '#9ca3af',
+  noticeFg: '#a3a3a3',
   noticeBorder: '#262626',
-  danger: '#f87171',
-  dangerBg: 'rgba(248,113,113,0.14)',
-  radius: 8,
+  // destructive stays mono: white-on-black instead of red
+  danger: '#ffffff',
+  dangerBg: '#000000',
+  radius: 4,
 } as const;

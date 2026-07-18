@@ -1,6 +1,6 @@
 import { db } from '@/src/core/db';
 import type { RuntimeRequest, RuntimeResponse, BulkStatus } from '@/src/core/bus';
-import type { Platform } from '@/src/core/types';
+import type { Message, Platform } from '@/src/core/types';
 import {
   rebuildIndex,
   upsertChatsIntoIndex,
@@ -216,11 +216,21 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
       if (msg.platform) hits = hits.filter((h) => h.platform === msg.platform);
       if (msg.account) hits = hits.filter((h) => h.account === msg.account);
 
+      const msgCount = await db.messages.limit(1).count();
       return {
         type: 'search_chats_ok',
         hits: hits.slice(0, msg.limit ?? 20),
-        titlesOnly: true,
+        titlesOnly: msgCount === 0,
       };
+    }
+
+    case 'get_stored_messages': {
+      const byChatPk: Record<string, Message[]> = {};
+      for (const chatPk of msg.chatPks) {
+        const messages = await db.messages.where('chatPk').equals(chatPk).sortBy('ts');
+        byChatPk[chatPk] = messages;
+      }
+      return { type: 'get_stored_messages_ok', byChatPk };
     }
 
     case 'list_folders': {

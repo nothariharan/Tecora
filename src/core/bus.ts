@@ -74,8 +74,9 @@ export type RuntimeRequest =
   | { type: 'get_bulk_status' }
   | { type: 'execute_delete'; chatPk: string }
   // side panel → content script (targeted tabs.sendMessage). fetches full
-  // conversation bodies from claude in the page's authed context.
-  | { type: 'fetch_conversations'; orgId: string; chatIds: string[] };
+  // conversation bodies in the page's authed context.
+  | { type: 'fetch_conversations'; orgId: string; chatIds: string[] }
+  | { type: 'get_stored_messages'; chatPks: string[] };
 
 // per-chat result of a fetch_conversations request
 export interface FetchedConversation {
@@ -96,10 +97,11 @@ export type RuntimeResponse =
   | { type: 'assign_tags_ok' }
   | { type: 'delete_tag_ok' }
   | { type: 'list_tags_ok'; tags: Tag[] }
-  | { type: 'search_chats_ok'; hits: SearchHit[]; titlesOnly: true }
+  | { type: 'search_chats_ok'; hits: SearchHit[]; titlesOnly: boolean }
   | { type: 'list_folders_ok'; folders: Folder[] }
   | { type: 'start_bulk_delete_ok' }
   | { type: 'get_bulk_status_ok'; status: BulkStatus }
   | { type: 'execute_delete_ok' }
   | { type: 'execute_delete_error'; error: string }
-  | { type: 'fetch_conversations_ok'; results: FetchedConversation[] };
+  | { type: 'fetch_conversations_ok'; results: FetchedConversation[] }
+  | { type: 'get_stored_messages_ok'; byChatPk: Record<string, Message[]> };

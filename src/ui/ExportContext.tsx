@@ -1,10 +1,16 @@
 import React, { createContext, useContext } from 'react';
 import type { Chat } from '@/src/core/types';
+import type { ExportFormat } from './export-actions';
 
 // one exporter for the whole panel so progress/errors surface in a single place.
 export interface ExportApi {
   busy: boolean;
-  exportChats: (chats: Chat[], label: string, single?: boolean) => void | Promise<void>;
+  exportChats: (
+    chats: Chat[],
+    label: string,
+    single?: boolean,
+    format?: ExportFormat,
+  ) => void | Promise<void>;
 }
 
 const ExportContext = createContext<ExportApi | null>(null);

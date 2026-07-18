@@ -8,38 +8,38 @@ living in three chat apps less chaotic.
 
 ## where things stand
 
-m1 done, early m2/m3 in progress. claude is the only platform wired up so far.
+v0.1 — usable across all three platforms. ui is minimal black / white.
 
 - extension scaffold (wxt + typescript + mv3)
-- main-world fetch interceptor catches claude's chat list
-- claude adapter normalizes conversations into a shared `Chat` type
-- dexie stores chats + folders locally (via the service worker)
-- side panel ui — browse chats, filter by title, create folders, assign chats
-- chats survive page reloads and browser restarts
-- minisearch index in the background (titles for now)
-- `ctrl/cmd+k` command palette on the page (shadow dom) — search + open chat
+- main-world fetch interceptor for claude + chatgpt chat lists and details
+- gemini via dom scrape + open-chat message capture
+- adapters normalize into a shared `Chat` / `Message` type
+- dexie stores chats, messages, folders, tags (via the service worker)
+- side panel — browse, folders, tags, select/export/bulk delete
+- minisearch index (titles + captured message text)
+- `ctrl/cmd+k` command palette on the page (shadow dom)
+- remote selector config (baked + github fetch) for delete ui resilience
 
-not done yet: message-content indexing, tags, bulk archive/delete, export,
-chatgpt + gemini adapters, remote selector config.
+not done yet: archive/rename, store listing polish.
 
 ## stack
 
 - [WXT](https://wxt.dev) — mv3 boilerplate, hot reload
 - React — side panel + palette (shadow dom)
 - Dexie.js — indexeddb, scoped per platform + account
-- MiniSearch — on-device title index
+- MiniSearch — on-device title + message index
 - typescript
 
 ## architecture (quick version)
 
 ```
-page (main world)     patches fetch, catches chat-list json
+page (main world)     patches fetch/xhr, catches chat-list + detail json
        ↓ postMessage
-content script        adapter normalizes, hosts ctrl+k palette
+content script        adapter normalizes, hosts ctrl+k palette, platform fetch
        ↓ runtime msg
-service worker        dexie writes, folder ops, search index
+service worker        dexie writes, folder/tag ops, search index, bulk queue
        ↓
-indexeddb             chats + folders, all on-device
+indexeddb             chats + messages + folders + tags, all on-device
 ```
 
 the service worker gets killed when idle (mv3 thing) — anything that needs to
@@ -53,16 +53,17 @@ npm run dev
 ```
 
 then in `chrome://extensions` → developer mode → load unpacked → pick
-`.output/chrome-mv3`. open claude.ai (logged in), click the toolbar icon for
-the side panel, or press `ctrl/cmd+k` on the page for the palette.
+`.output/chrome-mv3`. open claude.ai / chatgpt.com / gemini.google.com (logged
+in), click the toolbar icon for the side panel, or press `ctrl/cmd+k` on the
+page for the palette.
 
 ```bash
 npm run build     # production build
 npm run compile   # typecheck only
-npm test          # unit tests (adapter + search + bus)
+npm test          # unit tests
 ```
 
-optional chromium smoke (checks the unpacked build loads; does not log into claude):
+optional chromium smoke (checks the unpacked build loads; does not log in):
 
 ```bash
 node scripts/extension-smoke.mjs
@@ -71,36 +72,41 @@ node scripts/extension-smoke.mjs
 ## how to try the main flows
 
 **chats load and persist**
-1. load the extension, open claude.ai
+1. load the extension, open a supported site
 2. toolbar icon → side panel should list your chats
-3. hard reload (`ctrl+shift+r`) → chats still there
-4. quit and reopen the browser → open the side panel → chats still there
+3. hard reload → chats still there
+4. quit and reopen the browser → chats still there
 
-**folders**
-1. `+ New folder` → name it → add
-2. hover a chat → `⋯` → move to folder
-3. reload — assignment should stick
-4. click a folder to filter; `✕` deletes the folder (chats go back to unassigned)
+**folders & tags**
+1. `+ New folder` / `+ New tag` → name it → add
+2. hover a chat → `⋯` → assign folder or toggle tags
+3. click a folder/tag to filter
 
 **search**
 - side panel search bar filters by title
-- on claude.ai, `ctrl/cmd+k` opens the palette (titles only for now)
+- on a platform page, `ctrl/cmd+k` opens the palette (titles + message text)
 - ↑↓ to move, enter to open, esc to close
-- type `>` for command hints
+
+**export & bulk delete**
+- export one chat from `⋯`, or Export all / Select → Export N
+- Select → Delete N runs a safety-gated queue (platform tab must stay open)
 
 ## layout
 
 ```
 entrypoints/
-  injected.content.ts   main-world fetch patch
+  injected.content.ts   main-world fetch/xhr patch
   content.tsx           isolated script + palette mount
-  background.ts         service worker, db + search
+  background.ts         service worker, db + search + bulk queue
   sidepanel/            react side panel
 
 src/
-  core/                 types, bus, dexie, search index
-  adapters/             per-platform adapters (claude first)
-  ui/                   side panel components + palette
+  core/                 types, bus, dexie, search, export, chat urls
+  adapters/             claude / chatgpt / gemini
+  ui/                   side panel + palette (monochrome theme)
+
+config/
+  selectors.v1.json     delete-ui selectors (baked + remote)
 
 scripts/
   extension-smoke.mjs   load unpacked build in chromium
@@ -110,6 +116,6 @@ scripts/
 
 | platform | status |
 | --- | --- |
-| claude.ai | reading chats, folders, title search |
-| chatgpt.com | not yet |
-| gemini.google.com | not yet |
+| claude.ai | list, messages, folders/tags, search, export, delete |
+| chatgpt.com | list (+ fallback), messages, folders/tags, search, export, delete |
+| gemini.google.com | list via scrape, messages when chat open, folders/tags, search, export from stored msgs, delete |

@@ -95,6 +95,13 @@ export function SidePanel() {
     setSelectedChatPks(new Set());
   };
 
+  const archiveSelected = () => {
+    const selectedChats = filteredChats.filter((c) => selectedChatPks.has(c.pk));
+    exportChats(selectedChats, 'selected-chats', false, 'archive');
+    setEditMode(false);
+    setSelectedChatPks(new Set());
+  };
+
   const deleteSelected = async () => {
     const count = selectedChatPks.size;
     if (count === 0) return;
@@ -112,10 +119,10 @@ export function SidePanel() {
 
   const btnStyle: React.CSSProperties = {
     fontSize: 11.5,
-    fontWeight: 550,
+    fontWeight: 500,
     background: 'transparent',
     border: `1px solid ${T.borderStrong}`,
-    borderRadius: 5,
+    borderRadius: T.radius,
     padding: '3px 8px',
     cursor: 'pointer',
     color: T.muted,
@@ -132,7 +139,7 @@ export function SidePanel() {
     ...btnStyle,
     background: T.dangerBg,
     color: T.danger,
-    border: `1px solid ${T.danger}`,
+    border: `1px solid ${T.borderStrong}`,
   };
 
   return (
@@ -167,8 +174,8 @@ export function SidePanel() {
               {bulkQueue.errors > 0 && ` (${bulkQueue.errors} consecutive errors)`}
             </div>
             {bulkQueue.status === 'paused' && (
-              <div style={{ color: T.danger, fontSize: 11, marginTop: 4 }}>
-                Queue paused. Please make sure the platform tab is open!
+              <div style={{ color: T.fg, fontSize: 11, marginTop: 4 }}>
+                Queue paused. Open the platform tab to continue.
               </div>
             )}
           </div>
@@ -179,7 +186,7 @@ export function SidePanel() {
             padding: '6px 14px',
             fontSize: 12,
             borderBottom: `1px solid ${T.border}`,
-            color: error ? T.danger : T.muted,
+            color: error ? T.fg : T.muted,
             background: T.noticeBg,
           }}>
             {error
@@ -207,6 +214,7 @@ export function SidePanel() {
             </span>
             <span style={{ display: 'flex', gap: 6 }}>
               <button onClick={exportSelected} disabled={selectedChatPks.size === 0} style={actionBtnStyle}>Export ({selectedChatPks.size})</button>
+              <button onClick={archiveSelected} disabled={selectedChatPks.size === 0} style={actionBtnStyle}>Archive ({selectedChatPks.size})</button>
               <button onClick={deleteSelected} disabled={selectedChatPks.size === 0} style={dangerBtnStyle}>Delete ({selectedChatPks.size})</button>
             </span>
           </div>

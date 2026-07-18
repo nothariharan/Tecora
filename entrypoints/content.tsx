@@ -77,14 +77,14 @@ export default defineContentScript({
     );
 
     // side panel → this content script (targeted). fetch full conversation
-    // bodies from claude in the page's own authed context, then hand them back.
+    // bodies in the page's own authed context, then hand them back.
     browser.runtime.onMessage.addListener(
       (message: RuntimeRequest, _sender, sendResponse): boolean => {
         if (message.type === 'fetch_conversations') {
-          fetchConversations(message.orgId, message.chatIds).then((results) => {
+          fetchConversations(platform, message.orgId, message.chatIds).then((results) => {
             sendResponse({ type: 'fetch_conversations_ok', results } satisfies RuntimeResponse);
           });
-          return true; // async response
+          return true;
         }
 
         if (message.type === 'execute_delete') {
@@ -93,14 +93,30 @@ export default defineContentScript({
             sendResponse({ type: 'execute_delete_error', error: 'Invalid chat PK format' } satisfies RuntimeResponse);
             return false;
           }
-          adapter.delete(uuid)
-            .then(() => {
+          void (async () => {
+            const health = await adapter.health();
+            if (health.level === 'red') {
+              sendResponse({
+                type: 'execute_delete_error',
+                error: `adapter unhealthy: ${health.reason}`,
+              } satisfies RuntimeResponse);
+              return;
+            }
+            if (health.level === 'degraded') {
+              sendResponse({
+                type: 'execute_delete_error',
+                error: `adapter degraded: ${health.failing.join(', ')}`,
+              } satisfies RuntimeResponse);
+              return;
+            }
+            try {
+              await adapter.delete(uuid);
               sendResponse({ type: 'execute_delete_ok' } satisfies RuntimeResponse);
-            })
-            .catch((err) => {
+            } catch (err) {
               sendResponse({ type: 'execute_delete_error', error: String(err) } satisfies RuntimeResponse);
-            });
-          return true; // async response
+            }
+          })();
+          return true;
         }
 
         return false;
@@ -126,7 +142,7 @@ export default defineContentScript({
       }
     });
 
-    const activeFetch = async () => {
+    const activeFetchClaude = async () => {
       if (platform !== 'claude') return;
       if (pushed) return;
       const org = await resolveClaudeOrg();
@@ -137,7 +153,7 @@ export default defineContentScript({
       await pushChats(list, org);
     };
 
-    const scrapeOnce = async () => {
+    const scrapeClaudeOnce = async () => {
       if (platform !== 'claude') return;
       if (pushed) return;
       const org = (await resolveClaudeOrg()) ?? 'dom';
@@ -148,25 +164,69 @@ export default defineContentScript({
     };
 
     if (platform === 'claude') {
-      void activeFetch();
-      setTimeout(() => void activeFetch(), 3000);
-      setTimeout(() => void scrapeOnce(), 5000);
-      setTimeout(() => void scrapeOnce(), 9000);
+      void activeFetchClaude();
+      setTimeout(() => void activeFetchClaude(), 3000);
+      setTimeout(() => void scrapeClaudeOnce(), 5000);
+      setTimeout(() => void scrapeClaudeOnce(), 9000);
+    }
+
+    const activeFetchChatGPT = async () => {
+      if (platform !== 'chatgpt') return;
+      if (pushed) return;
+      const list = await fetchChatGPTChatList();
+      if (pushed || list.length === 0) return;
+      console.log('[tecora] chatgpt active fetch found', list.length, 'chats');
+      await pushChats(list, 'default');
+    };
+
+    const scrapeChatGPTOnce = async () => {
+      if (platform !== 'chatgpt') return;
+      if (pushed) return;
+      const scraped = scrapeChatGPTChatLinks();
+      if (scraped.length === 0) return;
+      console.log('[tecora] chatgpt dom fallback found', scraped.length, 'chats');
+      await pushChats(scraped, 'default');
+    };
+
+    if (platform === 'chatgpt') {
+      void activeFetchChatGPT();
+      setTimeout(() => void activeFetchChatGPT(), 3000);
+      setTimeout(() => void scrapeChatGPTOnce(), 5000);
+      setTimeout(() => void scrapeChatGPTOnce(), 9000);
     }
 
     const scrapeGemini = async () => {
       if (platform !== 'gemini') return;
       if (!(adapter instanceof GeminiAdapter)) return;
-      const scraped = adapter.scrapeChatsFromDOM('default');
+      const account = adapter.resolveAccount();
+      const scraped = adapter.scrapeChatsFromDOM(account);
       if (scraped.length === 0) return;
       console.log('[tecora] gemini scraped', scraped.length, 'chats');
-      await pushChats(scraped, 'default');
+      await pushChats(scraped, account);
+    };
+
+    const captureGeminiMessages = async () => {
+      if (platform !== 'gemini') return;
+      if (!(adapter instanceof GeminiAdapter)) return;
+      const chatId = adapter.currentChatIdFromUrl();
+      if (!chatId) return;
+      const account = adapter.resolveAccount();
+      const messages = adapter.scrapeMessagesFromDOM(chatId, account);
+      if (messages.length === 0) return;
+      console.log('[tecora] gemini scraped messages', messages.length, 'for', chatId);
+      await browser.runtime.sendMessage({
+        type: 'upsert_messages',
+        chatPk: `gemini:${account}:${chatId}`,
+        messages,
+      } satisfies RuntimeRequest);
     };
 
     if (platform === 'gemini') {
       setTimeout(() => void scrapeGemini(), 3000);
       setTimeout(() => void scrapeGemini(), 7000);
       setInterval(() => void scrapeGemini(), 15000);
+      setTimeout(() => void captureGeminiMessages(), 4000);
+      setInterval(() => void captureGeminiMessages(), 8000);
     }
 
     async function pushChats(raw: unknown[], account: string) {
@@ -191,7 +251,9 @@ export default defineContentScript({
       const messages =
         platform === 'chatgpt'
           ? normalizeChatGPTMessages(chatPk, raw)
-          : normalizeMessages(chatPk, raw);
+          : platform === 'claude'
+            ? normalizeMessages(chatPk, raw)
+            : [];
       console.log('[tecora] messages ready for', chatId, { count: messages.length });
 
       if (messages.length === 0) return;
@@ -205,24 +267,36 @@ export default defineContentScript({
   },
 });
 
-// fetch conversation detail for each chatId from claude's api, in the page's
-// authed (cookie) context. small concurrency cap so we don't hammer the api.
+// fetch conversation detail per platform in the page's authed context.
 async function fetchConversations(
+  platform: Platform,
   orgId: string,
   chatIds: string[],
 ): Promise<FetchedConversation[]> {
+  if (platform === 'gemini') {
+    return chatIds.map((chatId) => ({
+      chatId,
+      messages: [],
+      error: 'gemini uses stored messages only',
+    }));
+  }
+
   const results: FetchedConversation[] = [];
   const limit = 3;
+  const fetchOne =
+    platform === 'chatgpt'
+      ? (id: string) => fetchChatGPTOne(orgId, id)
+      : (id: string) => fetchClaudeOne(orgId, id);
 
   for (let i = 0; i < chatIds.length; i += limit) {
     const batch = chatIds.slice(i, i + limit);
-    const settled = await Promise.all(batch.map((id) => fetchOne(orgId, id)));
+    const settled = await Promise.all(batch.map(fetchOne));
     results.push(...settled);
   }
   return results;
 }
 
-async function fetchOne(orgId: string, chatId: string): Promise<FetchedConversation> {
+async function fetchClaudeOne(orgId: string, chatId: string): Promise<FetchedConversation> {
   const pk = `claude:${orgId}:${chatId}`;
   const url =
     `https://claude.ai/api/organizations/${orgId}/chat_conversations/${chatId}` +
@@ -238,6 +312,50 @@ async function fetchOne(orgId: string, chatId: string): Promise<FetchedConversat
     }
     const data: unknown = await res.json();
     return { chatId, messages: normalizeMessages(pk, data) };
+  } catch (err) {
+    return { chatId, messages: [], error: String(err) };
+  }
+}
+
+async function resolveChatGPTAccessToken(): Promise<string | null> {
+  try {
+    const res = await fetch('https://chatgpt.com/api/auth/session', {
+      credentials: 'include',
+      headers: { accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const data: unknown = await res.json();
+    if (data && typeof data === 'object') {
+      const token = (data as Record<string, unknown>)['accessToken'];
+      if (typeof token === 'string' && token) return token;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function chatgptHeaders(token: string | null): HeadersInit {
+  const headers: Record<string, string> = { accept: 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
+async function fetchChatGPTOne(account: string, chatId: string): Promise<FetchedConversation> {
+  const pk = `chatgpt:${account}:${chatId}`;
+  const url = `https://chatgpt.com/backend-api/conversation/${chatId}`;
+  const token = await resolveChatGPTAccessToken();
+
+  try {
+    const res = await fetch(url, {
+      credentials: 'include',
+      headers: chatgptHeaders(token),
+    });
+    if (!res.ok) {
+      return { chatId, messages: [], error: `http ${res.status}` };
+    }
+    const data: unknown = await res.json();
+    return { chatId, messages: normalizeChatGPTMessages(pk, data) };
   } catch (err) {
     return { chatId, messages: [], error: String(err) };
   }
@@ -329,6 +447,51 @@ function scrapeClaudeChatLinks(): unknown[] {
     });
   }
 
+  return chats;
+}
+
+async function fetchChatGPTChatList(): Promise<unknown[]> {
+  try {
+    const token = await resolveChatGPTAccessToken();
+    const res = await fetch(
+      'https://chatgpt.com/backend-api/conversations?offset=0&limit=100&order=updated',
+      { credentials: 'include', headers: chatgptHeaders(token) },
+    );
+    if (!res.ok) return [];
+    const data: unknown = await res.json();
+    if (data && typeof data === 'object') {
+      const items = (data as Record<string, unknown>)['items'];
+      if (Array.isArray(items)) return items;
+    }
+    if (Array.isArray(data)) return data;
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function scrapeChatGPTChatLinks(): unknown[] {
+  const links = Array.from(
+    document.querySelectorAll<HTMLAnchorElement>('a[href*="/c/"]'),
+  );
+  const chats: unknown[] = [];
+  const seen = new Set<string>();
+  const now = Date.now();
+
+  for (const a of links) {
+    const m = a.pathname.match(/^\/c\/([0-9a-f-]{8,})$/i);
+    if (!m) continue;
+    const id = m[1]!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const ts = (now - seen.size * 1000) / 1000;
+    chats.push({
+      id,
+      title: cleanScrapedTitle(a.textContent || '') || 'Untitled Chat',
+      create_time: ts,
+      update_time: ts,
+    });
+  }
   return chats;
 }
 

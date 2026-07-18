@@ -1,21 +1,23 @@
 {
-  "version": 1,
+  "version": 2,
   "claude": {
     "chatListItem": [
       "a[href*='/chat/']"
     ],
     "chatMenuButton": [
-      "button[aria-label*='actions']",
-      "button[aria-haspopup='menu']"
+      "button[aria-label*='actions' i]",
+      "button[aria-haspopup='menu']",
+      "button[data-testid*='chat-menu']"
     ],
     "deleteMenuItem": [
-      "div[role='menuitem']",
+      "[role='menuitem']",
       "button[role='menuitem']"
     ],
     "confirmDeleteBtn": [
+      "button[data-testid*='confirm']",
+      "button.bg-danger",
       "button.bg-red-600",
-      "button.danger",
-      "button"
+      "button.danger"
     ]
   },
   "chatgpt": {
@@ -23,37 +25,40 @@
       "a[href*='/c/']"
     ],
     "chatMenuButton": [
+      "button[data-testid*='history-item-options']",
       "button[aria-haspopup='menu']",
-      "button[data-testid*='actions']",
-      "button"
+      "button[aria-label*='options' i]",
+      "button[aria-label*='More' i]"
     ],
     "deleteMenuItem": [
-      "div[role='menuitem']",
+      "[role='menuitem']",
       "button[role='menuitem']"
     ],
     "confirmDeleteBtn": [
-      "button.bg-red-600",
+      "button[data-testid*='delete']",
       "button.btn-danger",
-      "button"
+      "button.bg-red-600"
     ]
   },
   "gemini": {
     "chatListItem": [
       "a[href*='/app/']",
+      "conversation-list-item a",
       "a[href*='/chat/']"
     ],
     "chatMenuButton": [
-      "button[aria-haspopup='true']",
-      "button[aria-label*='options']",
-      "button[aria-label*='actions']"
+      "button[aria-label*='More' i]",
+      "button[aria-label*='options' i]",
+      "button[aria-label*='actions' i]",
+      "button[aria-haspopup='menu']",
+      "button[aria-haspopup='true']"
     ],
     "deleteMenuItem": [
       "[role='menuitem']",
-      "button",
-      "div"
+      "button[role='menuitem']"
     ],
     "confirmDeleteBtn": [
-      "button",
+      "button[data-test-id*='confirm']",
       "button.danger"
     ]
   }

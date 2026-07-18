@@ -21,7 +21,7 @@ const rowBase: React.CSSProperties = {
   justifyContent: 'space-between',
   padding: '6px 10px',
   cursor: 'pointer',
-  borderRadius: 7,
+  borderRadius: T.radius,
   margin: '1px 6px',
   fontSize: 13,
 };
@@ -29,13 +29,13 @@ const rowBase: React.CSSProperties = {
 function pill(selected: boolean): React.CSSProperties {
   return {
     fontSize: 11,
-    fontWeight: 550,
+    fontWeight: 500,
     minWidth: 18,
     textAlign: 'center',
     background: selected ? T.pillStrongBg : T.pillBg,
     color: T.pillFg,
-    borderRadius: 20,
-    padding: '1px 7px',
+    borderRadius: T.radius,
+    padding: '1px 6px',
   };
 }
 

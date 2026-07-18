@@ -192,20 +192,7 @@ export function Palette({ open, onClose, platform, account, onOpenChat }: Props)
               >
                 <div className="title">{hit.title}</div>
                 {hit.text && mode === 'search' && input && (
-                  <div
-                    className="snippet"
-                    style={{
-                      fontSize: '11px',
-                      color: '#9ca3af',
-                      marginTop: '2px',
-                      fontStyle: 'italic',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {getSnippet(hit.text, input)}
-                  </div>
+                  <div className="snippet">{getSnippet(hit.text, input)}</div>
                 )}
                 <div className="meta">
                   <span>{folderName(hit.folderId) ?? 'unfiled'}</span>
@@ -242,7 +229,7 @@ export const PALETTE_STYLES = `
     pointer-events: auto;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(0, 0, 0, 0.55);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -252,9 +239,9 @@ export const PALETTE_STYLES = `
   .panel {
     width: min(560px, calc(100vw - 32px));
     background: #111111;
-    color: #e5e7eb;
-    border: 1px solid #333333;
-    border-radius: 12px;
+    color: #ffffff;
+    border: 1px solid #404040;
+    border-radius: 4px;
     overflow: hidden;
   }
   .input-row {
@@ -276,29 +263,37 @@ export const PALETTE_STYLES = `
     font-size: 10px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #9ca3af;
-    border: 1px solid #333333;
-    border-radius: 999px;
+    color: #a3a3a3;
+    border: 1px solid #404040;
+    border-radius: 4px;
     padding: 2px 7px;
     white-space: nowrap;
   }
   .list {
     list-style: none;
     margin: 0;
-    padding: 6px;
+    padding: 4px;
     max-height: 360px;
     overflow-y: auto;
   }
   .item {
     padding: 10px 12px;
-    border-radius: 8px;
+    border-radius: 4px;
     cursor: pointer;
   }
   .item.active { background: #262626; }
   .title {
     font-size: 13px;
     font-weight: 500;
-    color: #f3f4f6;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .snippet {
+    font-size: 11px;
+    color: #a3a3a3;
+    margin-top: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -309,12 +304,12 @@ export const PALETTE_STYLES = `
     justify-content: space-between;
     gap: 12px;
     font-size: 11px;
-    color: #9ca3af;
+    color: #a3a3a3;
   }
   .empty {
     padding: 18px 12px;
     text-align: center;
-    color: #6b7280;
+    color: #737373;
     font-size: 13px;
   }
   .footer {
@@ -323,6 +318,6 @@ export const PALETTE_STYLES = `
     padding: 8px 14px;
     border-top: 1px solid #262626;
     font-size: 11px;
-    color: #6b7280;
+    color: #737373;
   }
 `;

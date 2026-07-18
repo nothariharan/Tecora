@@ -47,7 +47,7 @@ export function TagItem({ tag, chats, selected, onSelect }: Props) {
         justifyContent: 'space-between',
         padding: '6px 10px',
         cursor: 'pointer',
-        borderRadius: 7,
+        borderRadius: T.radius,
         margin: '1px 6px',
         background: selected ? T.selectedBg : hover ? T.hover : 'transparent',
         color: selected ? T.selectedFg : T.fg,
@@ -80,7 +80,7 @@ export function TagItem({ tag, chats, selected, onSelect }: Props) {
               onClick={deleteTag}
               title="Delete tag"
               style={actionBtn}
-              onMouseEnter={(e) => { e.currentTarget.style.background = T.dangerBg; e.currentTarget.style.color = T.danger; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = T.selectedBg; e.currentTarget.style.color = T.fg; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = T.icon; }}
             >
               <IconTrash size={14} />
@@ -94,7 +94,7 @@ export function TagItem({ tag, chats, selected, onSelect }: Props) {
             textAlign: 'center',
             background: selected ? T.pillStrongBg : T.pillBg,
             color: T.pillFg,
-            borderRadius: 20,
+            borderRadius: T.radius,
             padding: '1px 7px',
           }}>
             {chats.length}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Chat, Folder, Tag } from '@/src/core/types';
 import type { RuntimeRequest } from '@/src/core/bus';
+import { chatUrl } from '@/src/core/chat-url';
 import { useExport } from '../ExportContext';
 import { IconMore, IconExport, IconFolder, IconCheck, IconFolderInput, IconTag } from './Icons';
 import { T } from '../theme';
@@ -56,12 +57,15 @@ export function ChatItem({ chat, folders, tags, editMode = false, selected = fal
     if (!busy) exportChats([chat], chat.title, true);
   }
 
+  function exportArchive() {
+    setShowMenu(false);
+    if (!busy) exportChats([chat], chat.title, true, 'archive');
+  }
+
   async function openChat() {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     if (tab?.id) {
-      await browser.tabs.update(tab.id, {
-        url: `https://${chat.platform === 'claude' ? 'claude.ai' : chat.platform === 'chatgpt' ? 'chatgpt.com' : 'gemini.google.com'}/chat/${chat.chatId}`,
-      });
+      await browser.tabs.update(tab.id, { url: chatUrl(chat.platform, chat.chatId) });
     }
   }
 
@@ -196,9 +200,8 @@ export function ChatItem({ chat, folders, tags, editMode = false, selected = fal
             left: 6,
             marginTop: -2,
             background: T.bg,
-            border: `1px solid ${T.border}`,
+            border: `1px solid ${T.borderStrong}`,
             borderRadius: T.radius,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
             padding: '4px 0',
             zIndex: 21,
             overflow: 'hidden',
@@ -211,6 +214,16 @@ export function ChatItem({ chat, folders, tags, editMode = false, selected = fal
             >
               <IconExport size={14} style={{ color: T.icon }} />
               Export as markdown
+            </div>
+
+            <div
+              onClick={exportArchive}
+              style={menuItem}
+              onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <IconExport size={14} style={{ color: T.icon }} />
+              Export portable archive
             </div>
 
             <div style={{ height: 1, background: T.border, margin: '4px 0' }} />

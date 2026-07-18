@@ -2,6 +2,16 @@ import type { Adapter } from './base';
 import type { Chat, HealthState, Message } from '@/src/core/types';
 import { getSelectors } from '@/src/core/config';
 
+function cleanTitle(raw: string): string {
+  const s = raw.replace(/\s+/g, ' ').trim();
+  if (!s) return 'Untitled Chat';
+  const half = s.length / 2;
+  if (Number.isInteger(half) && s.slice(0, half) === s.slice(half)) {
+    return s.slice(0, half) || 'Untitled Chat';
+  }
+  return s;
+}
+
 export class GeminiAdapter implements Adapter {
   readonly id = 'gemini' as const;
 
@@ -9,7 +19,7 @@ export class GeminiAdapter implements Adapter {
     archive: false,
     delete: true,
     rename: false,
-    exportMessages: false,
+    exportMessages: true,
   };
 
   private chatCache = new Map<string, Chat>();
@@ -20,6 +30,30 @@ export class GeminiAdapter implements Adapter {
     return url.hostname.includes('gemini.google.com');
   }
 
+  resolveAccount(): string {
+    if (this.account) return this.account;
+    // google sometimes stamps an account hint on the document; fall back stably
+    const meta = document.querySelector('meta[name="og-profile-acct"]')?.getAttribute('content');
+    if (meta && meta.trim()) {
+      this.account = meta.trim();
+      return this.account;
+    }
+    const m = document.cookie.match(/(?:^|; )\s*SAPISID=([^;]+)/);
+    if (m?.[1]) {
+      this.account = `g-${m[1].slice(0, 12)}`;
+      return this.account;
+    }
+    this.account = 'default';
+    return this.account;
+  }
+
+  currentChatIdFromUrl(): string | null {
+    const m =
+      window.location.pathname.match(/\/app\/([a-zA-Z0-9_-]+)/) ||
+      window.location.pathname.match(/\/chat\/([a-zA-Z0-9_-]+)/);
+    return m?.[1] ?? null;
+  }
+
   ingestRaw(items: unknown[], account: string): void {
     this.account = account;
     this.lastIngestAt = Date.now();
@@ -27,12 +61,18 @@ export class GeminiAdapter implements Adapter {
     for (const item of items) {
       if (!item || typeof item !== 'object') continue;
       const raw = item as Chat;
-      this.chatCache.set(raw.chatId, raw);
+      if (typeof raw.chatId !== 'string') continue;
+      this.chatCache.set(raw.chatId, {
+        ...raw,
+        platform: 'gemini',
+        account,
+        pk: `gemini:${account}:${raw.chatId}`,
+      });
     }
   }
 
   async listChats(): Promise<Chat[]> {
-    return Array.from(this.chatCache.values());
+    return Array.from(this.chatCache.values()).sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   async getMessages(_chatId: string): Promise<Message[]> {
@@ -40,7 +80,7 @@ export class GeminiAdapter implements Adapter {
   }
 
   async currentAccount(): Promise<string | null> {
-    return this.account;
+    return this.account ?? this.resolveAccount();
   }
 
   async archive(_chatId: string): Promise<void> {
@@ -50,7 +90,6 @@ export class GeminiAdapter implements Adapter {
   async delete(chatId: string): Promise<void> {
     const selectors = (await getSelectors()).gemini;
 
-    // 1. Find sidebar list item for chatId
     let chatItem: HTMLElement | null = null;
     for (const sel of selectors.chatListItem) {
       const links = Array.from(document.querySelectorAll(sel)) as HTMLAnchorElement[];
@@ -67,7 +106,6 @@ export class GeminiAdapter implements Adapter {
 
     chatItem.scrollIntoView({ block: 'center' });
 
-    // 2. Find menu button inside or near the list item
     let menuBtn: HTMLElement | null = null;
     for (const sel of selectors.chatMenuButton) {
       const btn = chatItem.querySelector(sel) as HTMLElement | null;
@@ -97,15 +135,16 @@ export class GeminiAdapter implements Adapter {
       throw new Error(`Could not find actions menu button for chat ${chatId}`);
     }
 
-    // 3. Click menu button
     menuBtn.click();
-    await new Promise((resolve) => setTimeout(resolve, 300)); // wait for menu dropdown
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
-    // 4. Find the Delete menu item in the body/dropdown
     let deleteItem: HTMLElement | null = null;
     for (const sel of selectors.deleteMenuItem) {
       const items = Array.from(document.querySelectorAll(sel)) as HTMLElement[];
-      const found = items.find((el) => el.textContent?.toLowerCase().includes('delete'));
+      const found = items.find((el) => {
+        const t = el.textContent?.toLowerCase().trim() ?? '';
+        return t === 'delete' || t.startsWith('delete');
+      });
       if (found) {
         deleteItem = found;
         break;
@@ -113,20 +152,12 @@ export class GeminiAdapter implements Adapter {
     }
 
     if (!deleteItem) {
-      const allItems = Array.from(document.querySelectorAll('[role="menuitem"], button, div')) as HTMLElement[];
-      const found = allItems.find((el) => el.textContent?.toLowerCase().includes('delete'));
-      if (found) deleteItem = found;
-    }
-
-    if (!deleteItem) {
       throw new Error(`Could not find Delete menu item in dropdown`);
     }
 
-    // 5. Click the Delete menu item to open confirmation modal
     deleteItem.click();
-    await new Promise((resolve) => setTimeout(resolve, 300)); // wait for modal
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
-    // 6. Find the confirmation button inside the modal
     let confirmBtn: HTMLElement | null = null;
     for (const sel of selectors.confirmDeleteBtn) {
       const btns = Array.from(document.querySelectorAll(sel)) as HTMLElement[];
@@ -138,20 +169,21 @@ export class GeminiAdapter implements Adapter {
     }
 
     if (!confirmBtn) {
-      const allButtons = Array.from(document.querySelectorAll('button')) as HTMLElement[];
-      const found = allButtons.find((el) => el.textContent?.toLowerCase().includes('delete'));
-      if (found) confirmBtn = found;
+      const dialog = document.querySelector('[role="dialog"], [aria-modal="true"]');
+      if (dialog) {
+        const btns = Array.from(dialog.querySelectorAll('button')) as HTMLElement[];
+        confirmBtn =
+          btns.find((el) => el.textContent?.toLowerCase().includes('delete')) ?? null;
+      }
     }
 
     if (!confirmBtn) {
       throw new Error(`Could not find confirmation Delete button in modal`);
     }
 
-    // 7. Confirm deletion
     confirmBtn.click();
-    await new Promise((resolve) => setTimeout(resolve, 800)); // wait for delete to process
+    await new Promise((resolve) => setTimeout(resolve, 800));
 
-    // 8. Verify it's gone
     let verifyItem: HTMLElement | null = null;
     for (const sel of selectors.chatListItem) {
       const links = Array.from(document.querySelectorAll(sel)) as HTMLAnchorElement[];
@@ -172,14 +204,23 @@ export class GeminiAdapter implements Adapter {
 
   async health(): Promise<HealthState> {
     const isAuthed = document.cookie.includes('SID') || document.cookie.includes('HSID');
-    if (isAuthed) {
+    if (!isAuthed) {
+      return { level: 'degraded', failing: ['google_session'] };
+    }
+    if (this.lastIngestAt === null) {
+      return { level: 'degraded', failing: ['no chat data received yet'] };
+    }
+    if (this.chatCache.size > 0) {
       return { level: 'green' };
     }
-    return { level: 'degraded', failing: ['google_session'] };
+    return { level: 'degraded', failing: ['dom scrape found no chats'] };
   }
 
   scrapeChatsFromDOM(account: string): Chat[] {
-    const selectors = ['a[href*="/app/"]', 'a[href*="/chat/"]'];
+    this.account = account;
+    this.lastIngestAt = Date.now();
+
+    const selectors = ['a[href*="/app/"]', 'conversation-list-item a', 'a[href*="/chat/"]'];
     const chats: Chat[] = [];
     const seen = new Set<string>();
     const now = Date.now();
@@ -187,15 +228,19 @@ export class GeminiAdapter implements Adapter {
     for (const sel of selectors) {
       const links = Array.from(document.querySelectorAll<HTMLAnchorElement>(sel));
       for (const a of links) {
-        const href = a.href;
+        const href = a.getAttribute('href') || a.href;
         const m = href.match(/\/app\/([a-zA-Z0-9_-]+)/) || href.match(/\/chat\/([a-zA-Z0-9_-]+)/);
         if (!m) continue;
-        const chatId = m[1];
-        if (seen.has(chatId)) continue;
+        const chatId = m[1]!;
+        if (chatId === 'new' || seen.has(chatId)) continue;
         seen.add(chatId);
 
-        const title = a.textContent?.trim() || 'Untitled Chat';
-        const ts = now - seen.size * 1000;
+        const title = cleanTitle(a.textContent || '');
+        // prefer data attributes when gemini exposes a real timestamp
+        const rawTs =
+          a.getAttribute('data-timestamp') ||
+          a.closest('[data-timestamp]')?.getAttribute('data-timestamp');
+        const updatedAt = rawTs ? Number(rawTs) || now - seen.size * 1000 : now - seen.size * 1000;
 
         chats.push({
           pk: `${this.id}:${account}:${chatId}`,
@@ -203,11 +248,90 @@ export class GeminiAdapter implements Adapter {
           platform: this.id,
           account,
           title,
-          updatedAt: ts,
+          updatedAt,
         });
       }
     }
 
+    for (const chat of chats) {
+      this.chatCache.set(chat.chatId, chat);
+    }
     return chats;
+  }
+
+  // scrape the open conversation turns for export + search indexing
+  scrapeMessagesFromDOM(chatId: string, account: string): Message[] {
+    const chatPk = `${this.id}:${account}:${chatId}`;
+    const messages: Message[] = [];
+
+    const turnSelectors = [
+      '[data-message-author-role]',
+      'message-content',
+      '.model-response-text',
+      '.user-query-text',
+      '[class*="query-text"]',
+      '[class*="response-text"]',
+    ];
+
+    const nodes: HTMLElement[] = [];
+    for (const sel of turnSelectors) {
+      for (const el of Array.from(document.querySelectorAll(sel)) as HTMLElement[]) {
+        if (!nodes.includes(el)) nodes.push(el);
+      }
+    }
+
+    // structured role attributes first
+    const roleNodes = Array.from(
+      document.querySelectorAll('[data-message-author-role]'),
+    ) as HTMLElement[];
+
+    if (roleNodes.length > 0) {
+      roleNodes.forEach((el, index) => {
+        const roleAttr = el.getAttribute('data-message-author-role') || '';
+        const role: Message['role'] =
+          roleAttr === 'user' || roleAttr === 'human'
+            ? 'user'
+            : roleAttr === 'system'
+              ? 'system'
+              : 'assistant';
+        const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+        messages.push({
+          pk: `${chatPk}:${index}`,
+          chatPk,
+          role,
+          text,
+          ts: Date.now() - (roleNodes.length - index) * 1000,
+        });
+      });
+      return messages;
+    }
+
+    // fallback: alternate user/assistant from query/response blocks
+    const blocks = Array.from(
+      document.querySelectorAll(
+        '.user-query-bubble-with-background, .user-query-text, message-content, .model-response-text, [class*="response-container"]',
+      ),
+    ) as HTMLElement[];
+
+    blocks.forEach((el, index) => {
+      const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text || text.length < 2) return;
+      const cls = (el.className || '').toString().toLowerCase();
+      const tag = el.tagName.toLowerCase();
+      const isUser =
+        cls.includes('user-query') ||
+        cls.includes('query-text') ||
+        tag.includes('user');
+      messages.push({
+        pk: `${chatPk}:${index}`,
+        chatPk,
+        role: isUser ? 'user' : 'assistant',
+        text,
+        ts: Date.now() - (blocks.length - index) * 1000,
+      });
+    });
+
+    return messages;
   }
 }

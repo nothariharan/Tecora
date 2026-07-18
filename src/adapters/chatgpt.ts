@@ -170,12 +170,6 @@ export class ChatGPTAdapter implements Adapter {
     }
 
     if (!deleteItem) {
-      const allItems = Array.from(document.querySelectorAll('[role="menuitem"], button, div')) as HTMLElement[];
-      const found = allItems.find((el) => el.textContent?.toLowerCase().includes('delete'));
-      if (found) deleteItem = found;
-    }
-
-    if (!deleteItem) {
       throw new Error(`Could not find Delete menu item in dropdown`);
     }
 
@@ -195,9 +189,12 @@ export class ChatGPTAdapter implements Adapter {
     }
 
     if (!confirmBtn) {
-      const allButtons = Array.from(document.querySelectorAll('button')) as HTMLElement[];
-      const found = allButtons.find((el) => el.textContent?.toLowerCase().includes('delete'));
-      if (found) confirmBtn = found;
+      const dialog = document.querySelector('[role="dialog"], [aria-modal="true"]');
+      if (dialog) {
+        const btns = Array.from(dialog.querySelectorAll('button')) as HTMLElement[];
+        confirmBtn =
+          btns.find((el) => el.textContent?.toLowerCase().includes('delete')) ?? null;
+      }
     }
 
     if (!confirmBtn) {
@@ -220,10 +217,17 @@ export class ChatGPTAdapter implements Adapter {
   }
 
   async health(): Promise<HealthState> {
-    const isAuthed = document.cookie.includes('__Secure-next-auth') || document.cookie.includes('session');
-    if (isAuthed) {
+    const isAuthed =
+      document.cookie.includes('__Secure-next-auth') || document.cookie.includes('session');
+    if (!isAuthed) {
+      return { level: 'degraded', failing: ['session_cookie'] };
+    }
+    if (this.lastIngestAt === null) {
+      return { level: 'degraded', failing: ['no chat data received yet'] };
+    }
+    if (this.chatCache.size > 0) {
       return { level: 'green' };
     }
-    return { level: 'degraded', failing: ['session_cookie'] };
+    return { level: 'degraded', failing: ['intercepted response had no recognisable chats'] };
   }
 }
