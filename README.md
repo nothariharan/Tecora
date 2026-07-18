@@ -1,61 +1,56 @@
 # Tecora
 
-folders, search, bulk cleanup and export for your ai chats — added on top of
-Claude, ChatGPT and Gemini. local-first: nothing leaves your device, no backend.
+Folders, search, bulk cleanup, portable archive import/export, and local-first organization for your AI chats on Claude, ChatGPT, and Gemini.
 
-it's a manifest v3 browser extension. not an ai wrapper, just a layer that makes
-living in three chat apps less chaotic.
+Tecora is a Manifest V3 browser extension. It is not an AI wrapper; it is a layer that makes living across multiple chat apps less chaotic. Nothing leaves your device and there is no backend.
 
-## where things stand
+## Where things stand
 
-v0.1 — usable across all three platforms. ui is minimal black / white.
+v0.1 - usable across all three platforms with a minimal black/white UI.
 
-- extension scaffold (wxt + typescript + mv3)
-- main-world fetch interceptor for claude + chatgpt chat lists and details
-- gemini via dom scrape + open-chat message capture
-- adapters normalize into a shared `Chat` / `Message` type
-- dexie stores chats, messages, folders, tags (via the service worker)
-- side panel — browse, folders, tags, select/export/bulk delete
-- minisearch index (titles + captured message text)
-- `ctrl/cmd+k` command palette on the page (shadow dom)
-- remote selector config (baked + github fetch) for delete ui resilience
+- Extension scaffold using WXT, TypeScript, and MV3.
+- Main-world fetch interceptor for Claude and ChatGPT chat lists/details.
+- Gemini support via DOM scrape plus open-chat message capture.
+- Adapters normalize platform data into shared `Chat` / `Message` types.
+- Dexie stores chats, messages, folders, and tags through the service worker.
+- Side panel for browsing, folders, tags, select/export, archive import/export, and bulk delete.
+- Portable archive export/import: JSON backups restore chats, messages, folders, and tags.
+- MiniSearch index for titles plus captured message text.
+- `ctrl/cmd+k` command palette on supported pages through a Shadow DOM overlay.
+- Remote selector config for delete UI resilience.
 
-not done yet: archive/rename, store listing polish.
+Not done yet: platform-native archive/rename, store listing polish, and deeper personalization packs.
 
-## stack
+## Stack
 
-- [WXT](https://wxt.dev) — mv3 boilerplate, hot reload
-- React — side panel + palette (shadow dom)
-- Dexie.js — indexeddb, scoped per platform + account
-- MiniSearch — on-device title + message index
-- typescript
+- [WXT](https://wxt.dev) - MV3 boilerplate and hot reload.
+- React - side panel and command palette.
+- Dexie.js - IndexedDB storage scoped per platform/account.
+- MiniSearch - on-device title and message search.
+- TypeScript.
 
-## architecture (quick version)
+## Architecture
 
-```
+```text
 page (main world)     patches fetch/xhr, catches chat-list + detail json
-       ↓ postMessage
+       -> postMessage
 content script        adapter normalizes, hosts ctrl+k palette, platform fetch
-       ↓ runtime msg
+       -> runtime msg
 service worker        dexie writes, folder/tag ops, search index, bulk queue
-       ↓
-indexeddb             chats + messages + folders + tags, all on-device
+       -> indexeddb
+storage               chats + messages + folders + tags, all on-device
 ```
 
-the service worker gets killed when idle (mv3 thing) — anything that needs to
-survive a restart lives in storage, not in memory.
+The service worker can be killed when idle because of MV3. Anything that needs to survive a restart lives in storage, not memory.
 
-## develop
+## Develop
 
 ```bash
 npm install
 npm run dev
 ```
 
-then in `chrome://extensions` → developer mode → load unpacked → pick
-`.output/chrome-mv3`. open claude.ai / chatgpt.com / gemini.google.com (logged
-in), click the toolbar icon for the side panel, or press `ctrl/cmd+k` on the
-page for the palette.
+Then open `chrome://extensions`, enable developer mode, load unpacked, and pick `.output/chrome-mv3`. Open `claude.ai`, `chatgpt.com`, or `gemini.google.com` while logged in. Click the toolbar icon for the side panel, or press `ctrl/cmd+k` on a supported page for the palette.
 
 ```bash
 npm run build     # production build
@@ -63,37 +58,44 @@ npm run compile   # typecheck only
 npm test          # unit tests
 ```
 
-optional chromium smoke (checks the unpacked build loads; does not log in):
+Optional Chromium smoke check:
 
 ```bash
 node scripts/extension-smoke.mjs
 ```
 
-## how to try the main flows
+## How to try the main flows
 
-**chats load and persist**
-1. load the extension, open a supported site
-2. toolbar icon → side panel should list your chats
-3. hard reload → chats still there
-4. quit and reopen the browser → chats still there
+**Chats load and persist**
 
-**folders & tags**
-1. `+ New folder` / `+ New tag` → name it → add
-2. hover a chat → `⋯` → assign folder or toggle tags
-3. click a folder/tag to filter
+1. Load the extension and open a supported site.
+2. Open the toolbar icon -> side panel; chats should appear.
+3. Hard reload; chats should still be there.
+4. Quit and reopen the browser; chats should still be there.
 
-**search**
-- side panel search bar filters by title
-- on a platform page, `ctrl/cmd+k` opens the palette (titles + message text)
-- ↑↓ to move, enter to open, esc to close
+**Folders and tags**
 
-**export & bulk delete**
-- export one chat from `⋯`, or Export all / Select → Export N
-- Select → Delete N runs a safety-gated queue (platform tab must stay open)
+1. Create a folder or tag.
+2. Hover a chat, open its menu, then assign a folder or toggle tags.
+3. Click a folder or tag to filter.
 
-## layout
+**Search**
 
-```
+- Side panel search filters by title.
+- On a platform page, `ctrl/cmd+k` opens the palette.
+- Arrow keys move, Enter opens, Escape closes.
+
+**Export, archive, import, and bulk delete**
+
+- Export one chat from its menu, or use Export all / Select -> Export.
+- Archive exports a portable `.json` backup.
+- Import restores Tecora archive files, including chats, messages, folders, and tags.
+- If messages have not been captured yet, export still downloads metadata and shows a warning.
+- Bulk delete runs a safety-gated queue; the platform tab must stay open.
+
+## Layout
+
+```text
 entrypoints/
   injected.content.ts   main-world fetch/xhr patch
   content.tsx           isolated script + palette mount
@@ -103,19 +105,19 @@ entrypoints/
 src/
   core/                 types, bus, dexie, search, export, chat urls
   adapters/             claude / chatgpt / gemini
-  ui/                   side panel + palette (monochrome theme)
+  ui/                   side panel + palette
 
 config/
-  selectors.v1.json     delete-ui selectors (baked + remote)
+  selectors.v1.json     delete-ui selectors
 
 scripts/
-  extension-smoke.mjs   load unpacked build in chromium
+  extension-smoke.mjs   load unpacked build in Chromium
 ```
 
-## platforms
+## Platforms
 
 | platform | status |
 | --- | --- |
-| claude.ai | list, messages, folders/tags, search, export, delete |
-| chatgpt.com | list (+ fallback), messages, folders/tags, search, export, delete |
-| gemini.google.com | list via scrape, messages when chat open, folders/tags, search, export from stored msgs, delete |
+| claude.ai | list, messages, folders/tags, search, export, archive, import, delete |
+| chatgpt.com | list (+ fallback), messages, folders/tags, search, export, archive, import, delete |
+| gemini.google.com | list via scrape, messages when chat open, folders/tags, search, export from stored messages, archive, import, delete |

@@ -107,4 +107,4 @@ export type RuntimeResponse =
   | { type: 'execute_delete_error'; error: string }
   | { type: 'fetch_conversations_ok'; results: FetchedConversation[] }
   | { type: 'get_stored_messages_ok'; byChatPk: Record<string, Message[]> }
-  | { type: 'import_archive_ok'; chats: number; messages: number };
+  | { type: 'import_archive_ok'; chats: number; messages: number; folders: number; tags: number };

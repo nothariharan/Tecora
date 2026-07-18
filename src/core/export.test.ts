@@ -6,7 +6,7 @@ import {
   portableArchive,
   slugify,
 } from './export';
-import type { Chat, Message } from './types';
+import type { Chat, Folder, Message, Tag } from './types';
 
 const chat: Chat = {
   pk: 'claude:org:1',
@@ -15,6 +15,22 @@ const chat: Chat = {
   chatId: '1',
   title: 'Hello World!',
   updatedAt: Date.parse('2026-07-01T00:00:00.000Z'),
+  folderId: 'folder-1',
+  tagIds: ['tag-1'],
+};
+
+const folder: Folder = {
+  id: 'folder-1',
+  platform: 'claude',
+  account: 'org',
+  name: 'Research',
+};
+
+const tag: Tag = {
+  id: 'tag-1',
+  platform: 'claude',
+  account: 'org',
+  name: 'portable',
 };
 
 describe('export markdown', () => {
@@ -58,7 +74,7 @@ describe('export markdown', () => {
     const messages: Message[] = [
       { pk: 'claude:org:1:0', chatPk: chat.pk, role: 'user', text: 'continue this', ts: 1 },
     ];
-    const archive = portableArchive([{ chat, messages }]);
+    const archive = portableArchive([{ chat, messages }], { folders: [folder], tags: [tag] });
 
     expect(archive).toMatchObject({
       tecora_export: 1,
@@ -66,6 +82,8 @@ describe('export markdown', () => {
       chat_count: 1,
       message_count: 1,
     });
+    expect(archive.folders).toEqual([folder]);
+    expect(archive.tags).toEqual([tag]);
     expect(archive.chats[0]?.chat).toEqual(chat);
     expect(archive.chats[0]?.messages).toEqual(messages);
     expect(isPortableArchive(archive)).toBe(true);

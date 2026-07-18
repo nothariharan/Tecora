@@ -2,7 +2,7 @@
 // (an extension page), so createObjectURL + a synthetic <a download> is enough:
 // no `downloads` permission required.
 
-import type { Chat, Message, Platform } from './types';
+import type { Chat, Folder, Message, Platform, Tag } from './types';
 
 const PLATFORM_LABEL: Record<Platform, string> = {
   claude: 'Claude',
@@ -82,6 +82,8 @@ export interface PortableArchive {
   exported_at: string;
   chat_count: number;
   message_count: number;
+  folders?: Folder[];
+  tags?: Tag[];
   chats: Array<{
     chat: Chat;
     messages: Message[];
@@ -120,6 +122,27 @@ function isMessage(value: unknown): value is Message {
   );
 }
 
+function isFolder(value: unknown): value is Folder {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['id'] === 'string' &&
+    isPlatform(value['platform']) &&
+    typeof value['account'] === 'string' &&
+    typeof value['name'] === 'string' &&
+    (value['parentId'] === undefined || typeof value['parentId'] === 'string')
+  );
+}
+
+function isTag(value: unknown): value is Tag {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['id'] === 'string' &&
+    isPlatform(value['platform']) &&
+    typeof value['account'] === 'string' &&
+    typeof value['name'] === 'string'
+  );
+}
+
 export function isPortableArchive(value: unknown): value is PortableArchive {
   if (!isRecord(value)) return false;
   if (value['tecora_export'] !== 1 || value['export_type'] !== 'portable_archive') {
@@ -127,6 +150,14 @@ export function isPortableArchive(value: unknown): value is PortableArchive {
   }
   const chats = value['chats'];
   if (!Array.isArray(chats)) return false;
+  const folders = value['folders'];
+  if (folders !== undefined && (!Array.isArray(folders) || !folders.every(isFolder))) {
+    return false;
+  }
+  const tags = value['tags'];
+  if (tags !== undefined && (!Array.isArray(tags) || !tags.every(isTag))) {
+    return false;
+  }
   return chats.every((entry) => {
     if (!isRecord(entry) || !isChat(entry['chat']) || !Array.isArray(entry['messages'])) {
       return false;
@@ -139,13 +170,18 @@ export function isPortableArchive(value: unknown): value is PortableArchive {
   });
 }
 
-export function portableArchive(entries: BulkEntry[]): PortableArchive {
+export function portableArchive(
+  entries: BulkEntry[],
+  metadata: { folders?: Folder[]; tags?: Tag[] } = {},
+): PortableArchive {
   return {
     tecora_export: 1,
     export_type: 'portable_archive',
     exported_at: new Date().toISOString(),
     chat_count: entries.length,
     message_count: entries.reduce((sum, entry) => sum + entry.messages.length, 0),
+    folders: metadata.folders ?? [],
+    tags: metadata.tags ?? [],
     chats: entries.map((entry) => ({
       chat: entry.chat,
       messages: entry.messages,

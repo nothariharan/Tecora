@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { Chat, Message, Platform } from '@/src/core/types';
+import type { Chat, Folder, Message, Platform, Tag } from '@/src/core/types';
 import type { RuntimeRequest, RuntimeResponse } from '@/src/core/bus';
 import { platformHost } from '@/src/core/chat-url';
 import {
@@ -56,6 +56,41 @@ async function fetchStoredMessages(chatPks: string[]): Promise<Map<string, Messa
     }
   }
   return map;
+}
+
+async function fetchArchiveMetadata(
+  chats: Chat[],
+): Promise<{ folders: Folder[]; tags: Tag[] }> {
+  const scopes = new Map<string, { platform: Platform; account: string }>();
+  for (const chat of chats) {
+    scopes.set(`${chat.platform}:${chat.account}`, {
+      platform: chat.platform,
+      account: chat.account,
+    });
+  }
+
+  const folders: Folder[] = [];
+  const tags: Tag[] = [];
+
+  for (const scope of scopes.values()) {
+    const [folderRes, tagRes] = await Promise.all([
+      browser.runtime.sendMessage({
+        type: 'list_folders',
+        platform: scope.platform,
+        account: scope.account,
+      } satisfies RuntimeRequest) as Promise<RuntimeResponse>,
+      browser.runtime.sendMessage({
+        type: 'list_tags',
+        platform: scope.platform,
+        account: scope.account,
+      } satisfies RuntimeRequest) as Promise<RuntimeResponse>,
+    ]);
+
+    if (folderRes.type === 'list_folders_ok') folders.push(...folderRes.folders);
+    if (tagRes.type === 'list_tags_ok') tags.push(...tagRes.tags);
+  }
+
+  return { folders, tags };
 }
 
 export interface ExportProgress {
@@ -131,7 +166,8 @@ export function useExporter() {
         }));
 
         if (format === 'archive') {
-          downloadJson(archiveFilename(label), portableArchive(entries));
+          const metadata = await fetchArchiveMetadata(chats);
+          downloadJson(archiveFilename(label), portableArchive(entries, metadata));
         } else if (single && chats.length === 1) {
           const chat = chats[0]!;
           downloadText(

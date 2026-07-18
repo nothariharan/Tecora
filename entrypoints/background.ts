@@ -241,9 +241,17 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
 
       const chats = msg.archive.chats.map((entry) => entry.chat);
       const messages = msg.archive.chats.flatMap((entry) => entry.messages);
+      const folders = msg.archive.folders ?? [];
+      const tags = msg.archive.tags ?? [];
 
-      await db.transaction('rw', db.chats, db.messages, async () => {
+      await db.transaction('rw', db.chats, db.messages, db.folders, db.tags, async () => {
         await db.chats.bulkPut(chats);
+        if (folders.length > 0) {
+          await db.folders.bulkPut(folders);
+        }
+        if (tags.length > 0) {
+          await db.tags.bulkPut(tags);
+        }
         for (const chat of chats) {
           await db.messages.where('chatPk').equals(chat.pk).delete();
         }
@@ -264,7 +272,13 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
       chatIndex = null;
       await ensureIndex();
 
-      return { type: 'import_archive_ok', chats: chats.length, messages: messages.length };
+      return {
+        type: 'import_archive_ok',
+        chats: chats.length,
+        messages: messages.length,
+        folders: folders.length,
+        tags: tags.length,
+      };
     }
 
     case 'list_folders': {

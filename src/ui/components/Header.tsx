@@ -68,7 +68,7 @@ export function Header({ platform, allChats, editMode, setEditMode }: Props) {
 
       if (res.type === 'import_archive_ok') {
         window.alert(
-          `Imported ${res.chats} chat${res.chats === 1 ? '' : 's'} and ${res.messages} message${res.messages === 1 ? '' : 's'}.`,
+          `Imported ${res.chats} chat${res.chats === 1 ? '' : 's'}, ${res.messages} message${res.messages === 1 ? '' : 's'}, ${res.folders} folder${res.folders === 1 ? '' : 's'}, and ${res.tags} tag${res.tags === 1 ? '' : 's'}.`,
         );
       }
     } catch (err) {
