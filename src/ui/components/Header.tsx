@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import type { Chat, Platform } from '@/src/core/types';
 import { useExport } from '../ExportContext';
 import { HelpButton } from './HelpButton';
-import { IconExport } from './Icons';
+import { IconChatGPT, IconClaude, IconExport, IconGemini, IconTau } from './Icons';
 import { T } from '../theme';
 import { isPortableArchive } from '@/src/core/export';
 import type { RuntimeRequest, RuntimeResponse } from '@/src/core/bus';
@@ -12,6 +12,12 @@ const PLATFORM_LABEL: Record<Platform, string> = {
   chatgpt: 'ChatGPT',
   gemini: 'Gemini',
 };
+
+function PlatformIcon({ platform, size = 15 }: { platform: Platform; size?: number }) {
+  if (platform === 'chatgpt') return <IconChatGPT size={size} />;
+  if (platform === 'gemini') return <IconGemini size={size} />;
+  return <IconClaude size={size} />;
+}
 
 interface Props {
   platform: Platform | null;
@@ -38,6 +44,7 @@ export function Header({ platform, allChats, editMode, setEditMode }: Props) {
     padding: '3px 9px 3px 7px',
     cursor: disabled ? 'default' : 'pointer',
     opacity: disabled ? 0.5 : 1,
+    flexShrink: 0,
   });
 
   const liftButton = (e: React.MouseEvent<HTMLButtonElement>, disabled = false) => {
@@ -85,27 +92,96 @@ export function Header({ platform, allChats, editMode, setEditMode }: Props) {
   return (
     <div style={{
       display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '11px 12px',
+      flexDirection: 'column',
+      gap: 8,
+      padding: '10px 12px',
       borderBottom: `1px solid ${T.border}`,
+      flexShrink: 0,
     }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 22, height: 22, borderRadius: T.radius,
-          background: T.fg, color: T.bg,
-          fontWeight: 700, fontSize: 13, letterSpacing: '-0.5px',
-        }}>
-          T
-        </span>
-        <span style={{ fontWeight: 600, fontSize: 15, letterSpacing: '-0.3px', color: T.fg }}>
-          Tecora
-        </span>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        minWidth: 0,
+      }}>
+        {platform ? (
+          <span
+            title={`Tecora · ${PLATFORM_LABEL[platform]}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 10,
+              minWidth: 0,
+              color: T.fg,
+            }}
+          >
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 28,
+              height: 28,
+              borderRadius: '999px',
+              background: T.selectedBg,
+              border: `1px solid ${T.borderStrong}`,
+              color: T.fg,
+              flexShrink: 0,
+            }}>
+              <IconTau size={15} />
+            </span>
+            <span style={{
+              fontWeight: 600,
+              fontSize: 15,
+              letterSpacing: '-0.2px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              minWidth: 0,
+            }}>
+              <PlatformIcon platform={platform} size={15} />
+              {PLATFORM_LABEL[platform]}
+            </span>
+          </span>
+        ) : (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            color: T.muted,
+            fontSize: 12.5,
+            minWidth: 0,
+          }}>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 26,
+              height: 26,
+              borderRadius: '999px',
+              background: T.selectedBg,
+              border: `1px solid ${T.borderStrong}`,
+              color: T.fg,
+              flexShrink: 0,
+            }}>
+              <IconTau size={14} />
+            </span>
+            Open Claude, ChatGPT, or Gemini
+          </span>
+        )}
         <HelpButton />
-      </span>
+      </div>
 
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 6,
+        minWidth: 0,
+      }}>
         {allChats.length > 0 && (
           <>
             <button
@@ -120,6 +196,7 @@ export function Header({ platform, allChats, editMode, setEditMode }: Props) {
                 borderRadius: T.radius,
                 padding: '3px 9px',
                 cursor: 'pointer',
+                flexShrink: 0,
               }}
             >
               {editMode ? 'Cancel' : 'Select'}
@@ -148,6 +225,18 @@ export function Header({ platform, allChats, editMode, setEditMode }: Props) {
               <IconExport size={13} />
               Archive
             </button>
+            <button
+              type="button"
+              disabled={exportDisabled}
+              onClick={() => exportChats(allChats, 'all-chats', false, 'zip')}
+              title="Export chats plus artifacts/files as a ZIP"
+              style={headerButtonStyle(exportDisabled)}
+              onMouseEnter={(e) => liftButton(e, exportDisabled)}
+              onMouseLeave={resetButton}
+            >
+              <IconExport size={13} />
+              ZIP
+            </button>
           </>
         )}
 
@@ -172,21 +261,7 @@ export function Header({ platform, allChats, editMode, setEditMode }: Props) {
         >
           {importing ? 'Importing...' : 'Import'}
         </button>
-
-        {platform && (
-          <span style={{
-            fontSize: 11,
-            fontWeight: 500,
-            color: T.pillFg,
-            background: T.pillBg,
-            border: `1px solid ${T.border}`,
-            borderRadius: T.radius,
-            padding: '3px 8px',
-          }}>
-            {PLATFORM_LABEL[platform]}
-          </span>
-        )}
-      </span>
+      </div>
     </div>
   );
 }

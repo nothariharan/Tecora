@@ -4,6 +4,7 @@
 //   L1         <-> L2 (background)  runtime.sendMessage
 
 import type { ActivityLogEntry, Chat, Folder, Message, Platform, PrivacySettings, Tag } from './types';
+import type { ChatAsset } from './assets';
 import type { SearchHit } from './search';
 import type { PortableArchive } from './export';
 
@@ -54,6 +55,13 @@ export interface BulkStatus {
 // L1 -> L2
 export type RuntimeRequest =
   | { type: 'ping'; platform: string; at: number }
+  // content script / side panel: pin the side panel to the focused site
+  | { type: 'set_active_context'; platform: Platform; account: string; force?: boolean }
+  // side panel: re-pin to a specific tab (or the focused one)
+  | { type: 'sync_active_context'; tabId?: number }
+  // side panel -> content script on the active tab
+  | { type: 'get_page_context' }
+  | { type: 'refresh_chats' }
   | { type: 'upsert_chats'; chats: Chat[] }
   | { type: 'upsert_messages'; chatPk: string; messages: Message[] }
   | { type: 'set_pinned'; chatPk: string; pinned: boolean }
@@ -80,6 +88,7 @@ export type RuntimeRequest =
   | { type: 'list_activity'; limit?: number }
   | { type: 'wipe_all_data' }
   | { type: 'execute_delete'; chatPk: string }
+  | { type: 'open_side_panel' }
   // side panel -> content script (targeted tabs.sendMessage). fetches full
   // conversation bodies in the page's authed context.
   | { type: 'fetch_conversations'; orgId: string; chatIds: string[] }
@@ -90,12 +99,17 @@ export type RuntimeRequest =
 export interface FetchedConversation {
   chatId: string;
   messages: Message[];
+  assets?: ChatAsset[];
   error?: string;
 }
 
 // L2 -> L1
 export type RuntimeResponse =
   | { type: 'pong'; at: number }
+  | { type: 'set_active_context_ok' }
+  | { type: 'sync_active_context_ok'; platform: Platform | null; account: string | null }
+  | { type: 'get_page_context_ok'; platform: Platform; account: string }
+  | { type: 'refresh_chats_ok'; count: number }
   | { type: 'upsert_chats_ok'; count: number }
   | { type: 'upsert_messages_ok' }
   | { type: 'set_pinned_ok' }
@@ -117,6 +131,8 @@ export type RuntimeResponse =
   | { type: 'wipe_all_data_ok' }
   | { type: 'execute_delete_ok' }
   | { type: 'execute_delete_error'; error: string }
+  | { type: 'open_side_panel_ok' }
+  | { type: 'open_side_panel_error'; error: string }
   | { type: 'fetch_conversations_ok'; results: FetchedConversation[] }
   | { type: 'get_stored_messages_ok'; byChatPk: Record<string, Message[]> }
   | { type: 'import_archive_ok'; chats: number; messages: number; folders: number; tags: number };

@@ -12,16 +12,25 @@ export function useChats(
   return (
     useLiveQuery(
       async () => {
-        // no active account yet — still show whatever we have so the panel
-        // isn't empty just because session storage hasn't caught up
-        let chats =
-          platform && account
-            ? await db.chats
-                .where('[platform+account]')
-                .equals([platform, account])
-                .reverse()
-                .sortBy('updatedAt')
-            : await db.chats.orderBy('updatedAt').reverse().toArray();
+        let chats: Chat[] = [];
+
+        if (platform && account) {
+          chats = await db.chats
+            .where('[platform+account]')
+            .equals([platform, account])
+            .reverse()
+            .sortBy('updatedAt');
+
+          // gemini account ids can drift (cookie hint vs default) — don't show an
+          // empty panel when we clearly have chats for this platform
+          if (chats.length === 0) {
+            chats = await db.chats.where('platform').equals(platform).reverse().sortBy('updatedAt');
+          }
+        } else if (platform) {
+          chats = await db.chats.where('platform').equals(platform).reverse().sortBy('updatedAt');
+        } else {
+          chats = await db.chats.orderBy('updatedAt').reverse().toArray();
+        }
 
         if (folderId === '') {
           chats = chats.filter((c) => !c.folderId);

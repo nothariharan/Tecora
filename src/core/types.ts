@@ -45,6 +45,7 @@ export interface ActivityLogEntry {
   action:
     | 'export_markdown'
     | 'export_archive'
+    | 'export_zip'
     | 'import_archive'
     | 'set_pinned'
     | 'bulk_delete_started'

@@ -13,6 +13,7 @@ import {
   normalizePrivacySettings,
   platformFromChatPk,
 } from '@/src/core/privacy';
+import { platformFromUrl } from '@/src/core/chat-url';
 import type { ActivityLogEntry, PrivacySettings } from '@/src/core/types';
 
 // rebuilt from dexie whenever the worker wakes cold — never trust in-memory alone
@@ -28,27 +29,134 @@ export default defineBackground(() => {
   setTimeout(() => processNextQueueItem(), 2000);
 
   browser.action.onClicked.addListener((tab) => {
-    if (tab.id) browser.sidePanel.open({ tabId: tab.id });
+    if (tab.id) {
+      void syncActiveContextFromTab(tab);
+      browser.sidePanel.open({ tabId: tab.id });
+    }
+  });
+
+  // side panel "On X" must follow the focused tab, not the last upserted chat
+  browser.tabs.onActivated.addListener(({ tabId }) => {
+    void browser.tabs.get(tabId).then((tab) => syncActiveContextFromTab(tab));
+  });
+  browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'complete' || changeInfo.url) {
+      void browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+        if (tabs[0]?.id === tabId) void syncActiveContextFromTab(tab);
+      });
+    }
   });
 
   browser.runtime.onMessage.addListener(
-    (message: RuntimeRequest, _sender, sendResponse): true => {
-      handleMessage(message).then(sendResponse);
+    (message: RuntimeRequest, sender, sendResponse): true => {
+      handleMessage(message, sender).then(sendResponse);
       return true;
     },
   );
 });
 
+async function setActiveContext(
+  platform: Platform,
+  account: string,
+  opts: { force?: boolean } = {},
+): Promise<void> {
+  if (!opts.force) {
+    // only accept if a tab on this platform is active in some window.
+    // do NOT use lastFocusedWindow alone — that steals gemini when claude
+    // is focused in another window.
+    const activeTabs = await browser.tabs.query({ active: true });
+    const hasMatchingTab = activeTabs.some((tab) => platformFromUrl(tab.url) === platform);
+    if (!hasMatchingTab) return;
+  }
+
+  const existing = await browser.storage.session.get(['activePlatform', 'activeAccount']);
+  if (existing['activePlatform'] === platform && existing['activeAccount'] === account) return;
+  await browser.storage.session.set({
+    activePlatform: platform,
+    activeAccount: account,
+  });
+}
+
+async function resolveAccountForPlatform(platform: Platform): Promise<string> {
+  const existing = await browser.storage.session.get(['activePlatform', 'activeAccount']);
+  if (
+    existing['activePlatform'] === platform &&
+    typeof existing['activeAccount'] === 'string' &&
+    existing['activeAccount']
+  ) {
+    return existing['activeAccount'] as string;
+  }
+
+  const chats = await db.chats.where('platform').equals(platform).toArray();
+  if (chats.length === 0) return 'default';
+  chats.sort((a, b) => b.updatedAt - a.updatedAt);
+  return chats[0]!.account;
+}
+
+async function syncActiveContextFromTab(
+  tab: { id?: number; url?: string } | undefined | null,
+): Promise<{ platform: Platform; account: string } | null> {
+  const platform = platformFromUrl(tab?.url);
+  if (!platform) return null;
+
+  // prefer the live account from the page's content script
+  let account = await resolveAccountForPlatform(platform);
+  if (tab?.id != null) {
+    try {
+      const page = (await browser.tabs.sendMessage(tab.id, {
+        type: 'get_page_context',
+      } satisfies RuntimeRequest)) as RuntimeResponse;
+      if (page?.type === 'get_page_context_ok' && page.platform === platform) {
+        account = page.account;
+      }
+    } catch {
+      // content script may not be injected yet
+    }
+  }
+
+  await setActiveContext(platform, account, { force: true });
+  return { platform, account };
+}
+
+async function syncActiveContextFromFocusedTab(): Promise<{
+  platform: Platform;
+  account: string;
+} | null> {
+  // try a few queries — side panel focus makes lastFocusedWindow flaky
+  const queries = [
+    { active: true, lastFocusedWindow: true },
+    { active: true, currentWindow: true },
+  ];
+  for (const query of queries) {
+    const tabs = await browser.tabs.query(query);
+    const synced = await syncActiveContextFromTab(tabs[0]);
+    if (synced) return synced;
+  }
+  return null;
+}
+
+async function syncActiveContextFromTabId(
+  tabId: number,
+): Promise<{ platform: Platform; account: string } | null> {
+  try {
+    const tab = await browser.tabs.get(tabId);
+    return syncActiveContextFromTab(tab);
+  } catch {
+    return null;
+  }
+}
+
 async function restoreSessionContext() {
+  // prefer the focused supported tab over whatever chat was upserted last
+  const fromTab = await syncActiveContextFromFocusedTab();
+  if (fromTab) return;
+
   const existing = await browser.storage.session.get(['activePlatform', 'activeAccount']);
   if (existing['activePlatform']) return;
 
   const latest = await db.chats.orderBy('updatedAt').last();
   if (latest) {
-    await browser.storage.session.set({
-      activePlatform: latest.platform,
-      activeAccount: latest.account,
-    });
+    await setActiveContext(latest.platform, latest.account, { force: true });
   }
 }
 
@@ -107,10 +215,56 @@ async function setPrivacySettings(settings: PrivacySettings): Promise<PrivacySet
   return normalized;
 }
 
-async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
+async function handleMessage(
+  msg: RuntimeRequest,
+  sender?: { tab?: { id?: number; windowId?: number } },
+): Promise<RuntimeResponse> {
   switch (msg.type) {
     case 'ping':
       return { type: 'pong', at: Date.now() };
+
+    case 'set_active_context': {
+      if (msg.force) {
+        await setActiveContext(msg.platform, msg.account, { force: true });
+        return { type: 'set_active_context_ok' };
+      }
+
+      // content-script announce: only if that tab is active in its own window
+      if (sender?.tab?.id != null && sender.tab.windowId != null) {
+        const [activeInWindow] = await browser.tabs.query({
+          active: true,
+          windowId: sender.tab.windowId,
+        });
+        if (activeInWindow?.id !== sender.tab.id) {
+          return { type: 'set_active_context_ok' };
+        }
+        await setActiveContext(msg.platform, msg.account, { force: true });
+        return { type: 'set_active_context_ok' };
+      }
+
+      await setActiveContext(msg.platform, msg.account);
+      return { type: 'set_active_context_ok' };
+    }
+
+    case 'sync_active_context': {
+      const fromTab =
+        typeof msg.tabId === 'number'
+          ? await syncActiveContextFromTabId(msg.tabId)
+          : await syncActiveContextFromFocusedTab();
+      if (fromTab) {
+        return {
+          type: 'sync_active_context_ok',
+          platform: fromTab.platform,
+          account: fromTab.account,
+        };
+      }
+      const existing = await browser.storage.session.get(['activePlatform', 'activeAccount']);
+      return {
+        type: 'sync_active_context_ok',
+        platform: (existing['activePlatform'] as Platform | undefined) ?? null,
+        account: (existing['activeAccount'] as string | undefined) ?? null,
+      };
+    }
 
     case 'upsert_chats': {
       let chatsToUpsert = msg.chats;
@@ -132,10 +286,18 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
           await db.chats.bulkPut(chatsToUpsert);
         });
 
-        await browser.storage.session.set({
-          activePlatform: chatsToUpsert[0]?.platform,
-          activeAccount: chatsToUpsert[0]?.account,
-        });
+        // never let a background tab's upsert steal the side panel platform.
+        // only refresh the account when an active tab is already this platform.
+        const first = chatsToUpsert[0];
+        if (first) {
+          const activeTabs = await browser.tabs.query({ active: true });
+          const matching = activeTabs.find(
+            (tab) => platformFromUrl(tab.url) === first.platform,
+          );
+          if (matching) {
+            await setActiveContext(first.platform, first.account, { force: true });
+          }
+        }
       }
       await ensureIndex();
       if (chatIndex) upsertChatsIntoIndex(chatIndex, chatsToUpsert);
@@ -334,12 +496,7 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
       });
 
       const latest = [...chats].sort((a, b) => b.updatedAt - a.updatedAt)[0];
-      if (latest) {
-        await browser.storage.session.set({
-          activePlatform: latest.platform,
-          activeAccount: latest.account,
-        });
-      }
+      if (latest) await setActiveContext(latest.platform, latest.account, { force: true });
 
       indexReady = null;
       chatIndex = null;
@@ -454,6 +611,30 @@ async function handleMessage(msg: RuntimeRequest): Promise<RuntimeResponse> {
     case 'execute_delete':
       // handled in content script, kept for switch exhaustiveness
       return { type: 'execute_delete_ok' };
+
+    case 'open_side_panel': {
+      const tabId = sender?.tab?.id;
+      if (tabId == null) {
+        return { type: 'open_side_panel_error', error: 'no tab to open beside' };
+      }
+      try {
+        await browser.sidePanel.open({ tabId });
+        return { type: 'open_side_panel_ok' };
+      } catch (err) {
+        return {
+          type: 'open_side_panel_error',
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+
+    case 'get_page_context':
+      // handled by the content script
+      return { type: 'get_page_context_ok', platform: 'claude', account: 'default' };
+
+    case 'refresh_chats':
+      // handled by the content script
+      return { type: 'refresh_chats_ok', count: 0 };
 
     case 'fetch_conversations':
       // handled by the content script (authed page context), never the worker.

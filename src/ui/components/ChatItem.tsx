@@ -84,6 +84,11 @@ export function ChatItem({
     if (!busy) exportChats([chat], chat.title, true, 'archive');
   }
 
+  function exportZip() {
+    setShowMenu(false);
+    if (!busy) exportChats([chat], chat.title, true, 'zip');
+  }
+
   async function openChat() {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     if (tab?.id) {
@@ -273,6 +278,16 @@ export function ChatItem({
             >
               <IconExport size={14} style={{ color: T.icon }} />
               Export portable archive
+            </div>
+
+            <div
+              onClick={exportZip}
+              style={menuItem}
+              onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <IconExport size={14} style={{ color: T.icon }} />
+              Export ZIP (with files)
             </div>
 
             <div style={{ height: 1, background: T.border, margin: '4px 0' }} />

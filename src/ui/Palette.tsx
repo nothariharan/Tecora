@@ -13,16 +13,6 @@ interface Props {
   onOpenChat: (chatId: string) => void;
 }
 
-function relativeTime(ts: number): string {
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
-
 function getSnippet(text: string | undefined, query: string): string | null {
   if (!text || !query) return null;
   const index = text.toLowerCase().indexOf(query.toLowerCase());
@@ -196,7 +186,6 @@ export function Palette({ open, onClose, platform, account, onOpenChat }: Props)
                 )}
                 <div className="meta">
                   <span>{folderName(hit.folderId) ?? 'unfiled'}</span>
-                  <span>{relativeTime(hit.updatedAt)}</span>
                 </div>
               </li>
             ))}

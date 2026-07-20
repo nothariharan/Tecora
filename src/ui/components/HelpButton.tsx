@@ -107,7 +107,7 @@ const SECTIONS = [
   {
     title: 'Exporting',
     body:
-      '⋯ → “Export as markdown” for one chat, or Export all / Export N in select mode. Open a few chats first so message bodies are captured (especially on Gemini).',
+      '⋯ → markdown, portable archive, or ZIP (with files). ZIP pulls Claude artifacts, ChatGPT images/files, and Gemini images from the open tab when possible. Open chats with those assets first — missing ones land in MISSING.md.',
   },
   {
     title: 'Search',

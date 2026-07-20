@@ -130,6 +130,13 @@ export function SidePanel() {
     setSelectedChatPks(new Set());
   };
 
+  const zipSelected = () => {
+    const selectedChats = filteredChats.filter((c) => selectedChatPks.has(c.pk));
+    exportChats(selectedChats, 'selected-chats', false, 'zip');
+    setEditMode(false);
+    setSelectedChatPks(new Set());
+  };
+
   const deleteSelected = async () => {
     const count = selectedChatPks.size;
     if (count === 0) return;
@@ -175,164 +182,178 @@ export function SidePanel() {
       <div style={{
         display: 'flex',
         flexDirection: 'column',
-        height: '100vh',
+        height: '100%',
+        overflow: 'hidden',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
         fontSize: 13,
         color: T.fg,
         background: T.bg,
       }}>
         <Header platform={platform} allChats={allChats} editMode={editMode} setEditMode={setEditMode} />
-        <HealthBanner
-          hasData={allChats.length > 0}
-          hasActiveAccount={Boolean(platform && account)}
-        />
-        <PrivacyActivityPanel />
 
-        {bulkQueue && bulkQueue.active && (
-          <div style={{
-            padding: '10px 14px',
-            background: T.noticeBg,
-            borderBottom: `1px solid ${T.border}`,
-            color: T.fg,
-          }}>
-            <div style={{ fontWeight: 600, fontSize: 13 }}>
-              {bulkQueue.status === 'running' ? 'Executing bulk delete...' : `Bulk delete ${bulkQueue.status}`}
-            </div>
-            <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
-              Progress: {bulkQueue.currentIdx} / {bulkQueue.chatPks.length} completed.
-              {bulkQueue.errors > 0 && ` (${bulkQueue.errors} consecutive errors)`}
-            </div>
-            {bulkQueue.status === 'paused' && (
-              <div style={{ color: T.fg, fontSize: 11, marginTop: 4 }}>
-                Queue paused. Open the platform tab to continue.
-              </div>
-            )}
-          </div>
-        )}
-
-        {(busy || error) && (
-          <div style={{
-            padding: '6px 14px',
-            fontSize: 12,
-            borderBottom: `1px solid ${T.border}`,
-            color: error ? T.fg : T.muted,
-            background: T.noticeBg,
-          }}>
-            {error
-              ? error
-              : progress
-                ? `Exporting ${progress.done}/${progress.total}…`
-                : 'Exporting…'}
-          </div>
-        )}
-
-        <SearchBar value={query} onChange={setQuery} />
-
+        {/* one scroll plane so folders + chats aren't trapped above a zero-height flex child */}
         <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '8px 12px',
-          borderBottom: `1px solid ${T.border}`,
-          gap: 8,
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
         }}>
-          <span style={{ display: 'flex', gap: 6 }}>
-            {(['active', 'all'] as ScopeMode[]).map((mode) => {
-              const activeMode = scopeMode === mode;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => switchScope(mode)}
-                  style={{
-                    fontSize: 11.5,
-                    fontWeight: 600,
-                    color: activeMode ? T.bg : T.muted,
-                    background: activeMode ? T.fg : 'transparent',
-                    border: `1px solid ${activeMode ? T.fg : T.borderStrong}`,
-                    borderRadius: T.radius,
-                    padding: '3px 8px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {mode === 'active' ? 'Current account' : 'All platforms'}
-                </button>
-              );
-            })}
-          </span>
-          <span style={{ fontSize: 11, color: T.faint }}>
-            {filteredChats.length} chat{filteredChats.length === 1 ? '' : 's'}
-          </span>
-        </div>
-
-        {!editMode && !query.trim() && (
-          <UsageAwarenessPanel estimates={usageEstimates} />
-        )}
-
-        {!editMode && !query.trim() && selectedFolderId === null && selectedTagId === null && (
-          <ResumeSection
-            chats={allChats.slice(0, 3)}
-            presentations={presentations}
+          <HealthBanner
+            hasData={allChats.length > 0}
+            hasActiveAccount={Boolean(platform && account)}
           />
-        )}
+          <PrivacyActivityPanel />
 
-        {editMode && (
+          {bulkQueue && bulkQueue.active && (
+            <div style={{
+              padding: '10px 14px',
+              background: T.noticeBg,
+              borderBottom: `1px solid ${T.border}`,
+              color: T.fg,
+            }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>
+                {bulkQueue.status === 'running' ? 'Executing bulk delete...' : `Bulk delete ${bulkQueue.status}`}
+              </div>
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
+                Progress: {bulkQueue.currentIdx} / {bulkQueue.chatPks.length} completed.
+                {bulkQueue.errors > 0 && ` (${bulkQueue.errors} consecutive errors)`}
+              </div>
+              {bulkQueue.status === 'paused' && (
+                <div style={{ color: T.fg, fontSize: 11, marginTop: 4 }}>
+                  Queue paused. Open the platform tab to continue.
+                </div>
+              )}
+            </div>
+          )}
+
+          {(busy || error) && (
+            <div style={{
+              padding: '6px 14px',
+              fontSize: 12,
+              borderBottom: `1px solid ${T.border}`,
+              color: error ? T.fg : T.muted,
+              background: T.noticeBg,
+            }}>
+              {error
+                ? error
+                : progress
+                  ? `Exporting ${progress.done}/${progress.total}…`
+                  : 'Exporting…'}
+            </div>
+          )}
+
+          <SearchBar value={query} onChange={setQuery} />
+
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '8px 12px',
-            background: T.noticeBg,
             borderBottom: `1px solid ${T.border}`,
+            gap: 8,
+            flexWrap: 'wrap',
           }}>
-            <span style={{ display: 'flex', gap: 6 }}>
-              <button onClick={selectAll} style={btnStyle}>Select all</button>
-              <button onClick={clearSelection} style={btnStyle}>Clear</button>
+            <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {(['active', 'all'] as ScopeMode[]).map((mode) => {
+                const activeMode = scopeMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => switchScope(mode)}
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      color: activeMode ? T.bg : T.muted,
+                      background: activeMode ? T.fg : 'transparent',
+                      border: `1px solid ${activeMode ? T.fg : T.borderStrong}`,
+                      borderRadius: T.radius,
+                      padding: '3px 8px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {mode === 'active' ? 'Current account' : 'All platforms'}
+                  </button>
+                );
+              })}
             </span>
-            <span style={{ display: 'flex', gap: 6 }}>
-              <button onClick={exportSelected} disabled={selectedChatPks.size === 0} style={actionBtnStyle}>Export ({selectedChatPks.size})</button>
-              <button onClick={archiveSelected} disabled={selectedChatPks.size === 0} style={actionBtnStyle}>Archive ({selectedChatPks.size})</button>
-              <button onClick={deleteSelected} disabled={selectedChatPks.size === 0} style={dangerBtnStyle}>Delete ({selectedChatPks.size})</button>
+            <span style={{ fontSize: 11, color: T.faint }}>
+              {filteredChats.length} chat{filteredChats.length === 1 ? '' : 's'}
             </span>
           </div>
-        )}
 
-        {!editMode && scopedPlatform && scopedAccount && (
-          <>
-            <FolderList
-              folders={folders}
-              allChats={allChats}
-              selectedFolderId={selectedFolderId}
-              onSelect={(fid) => {
-                setSelectedFolderId(fid);
-                setSelectedTagId(null);
-              }}
-              platform={scopedPlatform}
-              account={scopedAccount}
-            />
-            <TagList
-              tags={tags}
-              allChats={allChats}
-              selectedTagId={selectedTagId}
-              onSelect={(tid) => {
-                setSelectedTagId(tid);
-                setSelectedFolderId(null);
-              }}
-              platform={scopedPlatform}
-              account={scopedAccount}
-            />
-          </>
-        )}
+          {!editMode && !query.trim() && (
+            <UsageAwarenessPanel estimates={usageEstimates} />
+          )}
 
-        <ChatList
-          chats={filteredChats}
-          folders={folders}
-          tags={tags}
-          presentations={presentations}
-          editMode={editMode}
-          selectedChatPks={selectedChatPks}
-          onToggleSelectChat={toggleSelectChat}
-        />
+          {!editMode && !query.trim() && selectedFolderId === null && selectedTagId === null && (
+            <ResumeSection
+              chats={allChats.slice(0, 3)}
+              presentations={presentations}
+            />
+          )}
+
+          {editMode && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 12px',
+              background: T.noticeBg,
+              borderBottom: `1px solid ${T.border}`,
+              gap: 8,
+              flexWrap: 'wrap',
+            }}>
+              <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button onClick={selectAll} style={btnStyle}>Select all</button>
+                <button onClick={clearSelection} style={btnStyle}>Clear</button>
+              </span>
+              <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button onClick={exportSelected} disabled={selectedChatPks.size === 0} style={actionBtnStyle}>Export ({selectedChatPks.size})</button>
+                <button onClick={archiveSelected} disabled={selectedChatPks.size === 0} style={actionBtnStyle}>Archive ({selectedChatPks.size})</button>
+                <button onClick={zipSelected} disabled={selectedChatPks.size === 0} style={actionBtnStyle}>ZIP ({selectedChatPks.size})</button>
+                <button onClick={deleteSelected} disabled={selectedChatPks.size === 0} style={dangerBtnStyle}>Delete ({selectedChatPks.size})</button>
+              </span>
+            </div>
+          )}
+
+          {!editMode && scopedPlatform && scopedAccount && (
+            <>
+              <FolderList
+                folders={folders}
+                allChats={allChats}
+                selectedFolderId={selectedFolderId}
+                onSelect={(fid) => {
+                  setSelectedFolderId(fid);
+                  setSelectedTagId(null);
+                }}
+                platform={scopedPlatform}
+                account={scopedAccount}
+              />
+              <TagList
+                tags={tags}
+                allChats={allChats}
+                selectedTagId={selectedTagId}
+                onSelect={(tid) => {
+                  setSelectedTagId(tid);
+                  setSelectedFolderId(null);
+                }}
+                platform={scopedPlatform}
+                account={scopedAccount}
+              />
+            </>
+          )}
+
+          <ChatList
+            chats={filteredChats}
+            folders={folders}
+            tags={tags}
+            presentations={presentations}
+            editMode={editMode}
+            selectedChatPks={selectedChatPks}
+            onToggleSelectChat={toggleSelectChat}
+          />
+        </div>
       </div>
     </ExportProvider>
   );

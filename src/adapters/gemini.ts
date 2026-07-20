@@ -32,17 +32,7 @@ export class GeminiAdapter implements Adapter {
 
   resolveAccount(): string {
     if (this.account) return this.account;
-    // google sometimes stamps an account hint on the document; fall back stably
-    const meta = document.querySelector('meta[name="og-profile-acct"]')?.getAttribute('content');
-    if (meta && meta.trim()) {
-      this.account = meta.trim();
-      return this.account;
-    }
-    const m = document.cookie.match(/(?:^|; )\s*SAPISID=([^;]+)/);
-    if (m?.[1]) {
-      this.account = `g-${m[1].slice(0, 12)}`;
-      return this.account;
-    }
+    // keep gemini on a stable bucket — cookie hints change and orphan chats
     this.account = 'default';
     return this.account;
   }
@@ -220,7 +210,17 @@ export class GeminiAdapter implements Adapter {
     this.account = account;
     this.lastIngestAt = Date.now();
 
-    const selectors = ['a[href*="/app/"]', 'conversation-list-item a', 'a[href*="/chat/"]'];
+    const selectors = [
+      'a[href*="/app/"]',
+      'a[href*="/gemini/chat/"]',
+      'a[href*="/chat/"]',
+      'conversation-list-item a',
+      '[data-test-id*="conversation"] a',
+      'nav a[href*="/app/"]',
+      '[role="navigation"] a[href*="/app/"]',
+      '[role="listbox"] a[href*="/app/"]',
+      '[role="option"] a[href*="/app/"]',
+    ];
     const chats: Chat[] = [];
     const seen = new Set<string>();
     const now = Date.now();
@@ -229,10 +229,13 @@ export class GeminiAdapter implements Adapter {
       const links = Array.from(document.querySelectorAll<HTMLAnchorElement>(sel));
       for (const a of links) {
         const href = a.getAttribute('href') || a.href;
-        const m = href.match(/\/app\/([a-zA-Z0-9_-]+)/) || href.match(/\/chat\/([a-zA-Z0-9_-]+)/);
+        const m =
+          href.match(/\/app\/([a-zA-Z0-9_-]+)/) ||
+          href.match(/\/gemini\/chat\/([a-zA-Z0-9_-]+)/) ||
+          href.match(/\/chat\/([a-zA-Z0-9_-]+)/);
         if (!m) continue;
         const chatId = m[1]!;
-        if (chatId === 'new' || seen.has(chatId)) continue;
+        if (chatId === 'new' || chatId === 'app' || seen.has(chatId)) continue;
         seen.add(chatId);
 
         const title = cleanTitle(a.textContent || '');

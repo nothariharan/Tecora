@@ -2,17 +2,13 @@ import { PAGE_MSG_KEY, type PageEnvelope } from '@/src/core/bus';
 import type { Platform } from '@/src/core/types';
 
 // L0 — main world. isolated content scripts can't see fetch responses, so this
-// runs in the page's js context and patches fetch/xhr before claude boots.
+// runs in the page's js context and patches fetch/xhr before the site boots.
 //
-// endpoint we care about rn:
-//   GET /api/organizations/{org_uuid}/chat_conversations
-// org uuid in the path = account id for storage scoping.
+// gemini is intentionally omitted: it has no list/detail api we intercept and
+// uses dom scraping from the isolated content script instead. patching fetch
+// there only makes gemini's own csp-blocked analytics show up as injected.js.
 export default defineContentScript({
-  matches: [
-    'https://claude.ai/*',
-    'https://chatgpt.com/*',
-    'https://gemini.google.com/*',
-  ],
+  matches: ['https://claude.ai/*', 'https://chatgpt.com/*'],
   world: 'MAIN',
   runAt: 'document_start',
   main() {

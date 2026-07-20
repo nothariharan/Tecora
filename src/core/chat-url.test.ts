@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chatUrl, platformHost } from './chat-url';
+import { chatUrl, platformFromUrl, platformHost } from './chat-url';
 
 describe('chatUrl', () => {
   it('uses the right path per platform', () => {
@@ -14,5 +14,15 @@ describe('platformHost', () => {
     expect(platformHost('claude')).toBe('claude.ai');
     expect(platformHost('chatgpt')).toBe('chatgpt.com');
     expect(platformHost('gemini')).toBe('gemini.google.com');
+  });
+});
+
+describe('platformFromUrl', () => {
+  it('detects supported hosts and ignores everything else', () => {
+    expect(platformFromUrl('https://gemini.google.com/app?hl=en-IN')).toBe('gemini');
+    expect(platformFromUrl('https://claude.ai/chat/abc')).toBe('claude');
+    expect(platformFromUrl('https://chatgpt.com/')).toBe('chatgpt');
+    expect(platformFromUrl('https://google.com/')).toBeNull();
+    expect(platformFromUrl(undefined)).toBeNull();
   });
 });

@@ -26,7 +26,6 @@ export function ChatList({
   if (chats.length === 0) {
     return (
       <div style={{
-        flex: 1,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -41,7 +40,7 @@ export function ChatList({
   }
 
   return (
-    <div style={{ overflowY: 'auto', flex: 1, padding: '4px 0 8px' }}>
+    <div style={{ padding: '4px 0 16px' }}>
       {chats.map((chat) => (
         <ChatItem
           key={chat.pk}

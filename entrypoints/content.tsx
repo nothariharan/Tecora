@@ -4,6 +4,15 @@ import type { FetchedConversation, RuntimeRequest, RuntimeResponse } from '@/src
 import { ClaudeAdapter, normalizeMessages } from '@/src/adapters/claude';
 import { ChatGPTAdapter, normalizeChatGPTMessages } from '@/src/adapters/chatgpt';
 import { GeminiAdapter } from '@/src/adapters/gemini';
+import {
+  base64FromBytes,
+  claudeFileDownloadUrl,
+  dedupeAssets,
+  extractChatGPTAssets,
+  extractClaudeAssets,
+  extractGeminiAssetsFromDOM,
+  type ChatAsset,
+} from '@/src/core/assets';
 import { mountShadowApp } from '@/src/ui/shadow-root';
 import { Palette, PALETTE_STYLES } from '@/src/ui/Palette';
 import { StatusChip, CHIP_STYLES } from '@/src/ui/StatusChip';
@@ -55,6 +64,24 @@ export default defineContentScript({
 
     console.log('[tecora] content script ready');
 
+    // pin the side panel to this tab's platform immediately — don't wait for chats
+    const announceContext = async () => {
+      const account = (await adapter.currentAccount()) ?? 'default';
+      bridge.setAccount(account);
+      await browser.runtime.sendMessage({
+        type: 'set_active_context',
+        platform,
+        account,
+      } satisfies RuntimeRequest);
+    };
+    void announceContext();
+    // re-announce when the tab becomes visible again (side panel may have drifted)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void announceContext();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+
     window.addEventListener(
       'keydown',
       (e) => {
@@ -80,6 +107,53 @@ export default defineContentScript({
     // bodies in the page's own authed context, then hand them back.
     browser.runtime.onMessage.addListener(
       (message: RuntimeRequest, _sender, sendResponse): boolean => {
+        if (message.type === 'get_page_context') {
+          void (async () => {
+            const account = (await adapter.currentAccount()) ?? 'default';
+            bridge.setAccount(account);
+            sendResponse({
+              type: 'get_page_context_ok',
+              platform,
+              account,
+            } satisfies RuntimeResponse);
+          })();
+          return true;
+        }
+
+        if (message.type === 'refresh_chats') {
+          void (async () => {
+            try {
+              if (platform === 'gemini' && adapter instanceof GeminiAdapter) {
+                const account = adapter.resolveAccount();
+                const scraped = adapter.scrapeChatsFromDOM(account);
+                if (scraped.length > 0) {
+                  await pushChats(scraped, account);
+                }
+                sendResponse({
+                  type: 'refresh_chats_ok',
+                  count: scraped.length,
+                } satisfies RuntimeResponse);
+                return;
+              }
+
+              if (platform === 'claude') {
+                await activeFetchClaude();
+              } else if (platform === 'chatgpt') {
+                await activeFetchChatGPT();
+              }
+              const chats = await adapter.listChats();
+              sendResponse({
+                type: 'refresh_chats_ok',
+                count: chats.length,
+              } satisfies RuntimeResponse);
+            } catch (err) {
+              console.warn('[tecora] refresh_chats failed', err);
+              sendResponse({ type: 'refresh_chats_ok', count: 0 } satisfies RuntimeResponse);
+            }
+          })();
+          return true;
+        }
+
         if (message.type === 'fetch_conversations') {
           fetchConversations(platform, message.orgId, message.chatIds).then((results) => {
             sendResponse({ type: 'fetch_conversations_ok', results } satisfies RuntimeResponse);
@@ -222,9 +296,11 @@ export default defineContentScript({
     };
 
     if (platform === 'gemini') {
-      setTimeout(() => void scrapeGemini(), 3000);
-      setTimeout(() => void scrapeGemini(), 7000);
-      setInterval(() => void scrapeGemini(), 15000);
+      void scrapeGemini();
+      setTimeout(() => void scrapeGemini(), 1500);
+      setTimeout(() => void scrapeGemini(), 4000);
+      setTimeout(() => void scrapeGemini(), 8000);
+      setInterval(() => void scrapeGemini(), 10000);
       setTimeout(() => void captureGeminiMessages(), 4000);
       setInterval(() => void captureGeminiMessages(), 8000);
     }
@@ -236,6 +312,13 @@ export default defineContentScript({
       const chats = await adapter.listChats();
       bridge.setChatCount(chats.length);
       console.log('[tecora] chats ready', { count: chats.length });
+
+      // keep side panel pinned to this page even if another tab upserts later
+      await browser.runtime.sendMessage({
+        type: 'set_active_context',
+        platform,
+        account,
+      } satisfies RuntimeRequest);
 
       if (chats.length === 0) return;
 
@@ -267,6 +350,121 @@ export default defineContentScript({
   },
 });
 
+async function fetchAssetBytes(
+  url: string,
+  headers: HeadersInit = {},
+): Promise<{ base64: string; mimeType?: string } | { error: string }> {
+  try {
+    const res = await fetch(url, { credentials: 'include', headers });
+    if (!res.ok) return { error: `http ${res.status}` };
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength === 0) return { error: 'empty response' };
+    const mimeType = res.headers.get('content-type')?.split(';')[0] || undefined;
+    return { base64: base64FromBytes(buf), mimeType };
+  } catch (err) {
+    return { error: String(err) };
+  }
+}
+
+async function resolveAssetBytes(
+  assets: ChatAsset[],
+  opts: { orgId?: string; chatgptToken?: string | null } = {},
+): Promise<ChatAsset[]> {
+  const out: ChatAsset[] = [];
+
+  for (const asset of assets) {
+    if (asset.text != null || asset.base64 || asset.missingReason) {
+      out.push(asset);
+      continue;
+    }
+
+    let url = asset.source;
+    if (url.startsWith('file_uuid:') && opts.orgId) {
+      url = claudeFileDownloadUrl(opts.orgId, url.slice('file_uuid:'.length));
+    }
+
+    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('blob:')) {
+      out.push({ ...asset, missingReason: 'no downloadable url' });
+      continue;
+    }
+
+    const headers: Record<string, string> = {};
+    if (asset.platform === 'chatgpt' && opts.chatgptToken) {
+      headers['Authorization'] = `Bearer ${opts.chatgptToken}`;
+    }
+
+    const result = await fetchAssetBytes(url, headers);
+    if ('error' in result) {
+      out.push({ ...asset, missingReason: result.error });
+    } else {
+      out.push({
+        ...asset,
+        base64: result.base64,
+        mimeType: result.mimeType ?? asset.mimeType,
+      });
+    }
+  }
+
+  return out;
+}
+
+async function fetchClaudeWiggleAssets(orgId: string, chatId: string): Promise<ChatAsset[]> {
+  const assets: ChatAsset[] = [];
+  try {
+    const listUrl =
+      `https://claude.ai/api/organizations/${orgId}/conversations/${chatId}/wiggle/list-files`;
+    const res = await fetch(listUrl, {
+      credentials: 'include',
+      headers: { accept: 'application/json' },
+    });
+    if (!res.ok) return assets;
+    const data: unknown = await res.json();
+    const paths: string[] = [];
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        if (typeof item === 'string') paths.push(item);
+        else if (item && typeof item === 'object') {
+          const p = (item as { path?: unknown; name?: unknown }).path
+            ?? (item as { path?: unknown; name?: unknown }).name;
+          if (typeof p === 'string') paths.push(p);
+        }
+      }
+    } else if (data && typeof data === 'object') {
+      const files = (data as { files?: unknown }).files;
+      if (Array.isArray(files)) {
+        for (const item of files) {
+          if (typeof item === 'string') paths.push(item);
+          else if (item && typeof item === 'object' && typeof (item as { path?: unknown }).path === 'string') {
+            paths.push((item as { path: string }).path);
+          }
+        }
+      }
+    }
+
+    const outputs = paths.filter(
+      (p) => p.includes('/mnt/user-data/outputs/') || p.includes('/outputs/'),
+    );
+    let i = 0;
+    for (const path of outputs.slice(0, 40)) {
+      const downloadUrl =
+        `https://claude.ai/api/organizations/${orgId}/conversations/${chatId}` +
+        `/wiggle/download-file?path=${encodeURIComponent(path)}`;
+      const name = path.split('/').pop() || `wiggle-${i + 1}`;
+      assets.push({
+        id: `claude:${chatId}:wiggle:${i++}`,
+        chatId,
+        platform: 'claude',
+        kind: 'file',
+        filename: name,
+        source: downloadUrl,
+      });
+    }
+  } catch {
+    // wiggle is optional — artifacts still come from tool_use
+  }
+  return assets;
+}
+
 // fetch conversation detail per platform in the page's authed context.
 async function fetchConversations(
   platform: Platform,
@@ -274,11 +472,7 @@ async function fetchConversations(
   chatIds: string[],
 ): Promise<FetchedConversation[]> {
   if (platform === 'gemini') {
-    return chatIds.map((chatId) => ({
-      chatId,
-      messages: [],
-      error: 'gemini uses stored messages only',
-    }));
+    return fetchGeminiConversations(chatIds);
   }
 
   const results: FetchedConversation[] = [];
@@ -296,6 +490,31 @@ async function fetchConversations(
   return results;
 }
 
+async function fetchGeminiConversations(chatIds: string[]): Promise<FetchedConversation[]> {
+  // gemini has no clean conversation json — scrape the open chat when it matches
+  const openId =
+    window.location.pathname.match(/\/app\/([a-zA-Z0-9_-]+)/)?.[1] ||
+    window.location.pathname.match(/\/chat\/([a-zA-Z0-9_-]+)/)?.[1] ||
+    null;
+
+  const results: FetchedConversation[] = [];
+  for (const chatId of chatIds) {
+    if (openId && openId === chatId) {
+      const extracted = extractGeminiAssetsFromDOM(chatId);
+      const assets = await resolveAssetBytes(extracted);
+      results.push({ chatId, messages: [], assets });
+    } else {
+      results.push({
+        chatId,
+        messages: [],
+        assets: [],
+        error: 'gemini assets require the chat to be open in this tab',
+      });
+    }
+  }
+  return results;
+}
+
 async function fetchClaudeOne(orgId: string, chatId: string): Promise<FetchedConversation> {
   const pk = `claude:${orgId}:${chatId}`;
   const url =
@@ -308,12 +527,17 @@ async function fetchClaudeOne(orgId: string, chatId: string): Promise<FetchedCon
       headers: { accept: 'application/json' },
     });
     if (!res.ok) {
-      return { chatId, messages: [], error: `http ${res.status}` };
+      return { chatId, messages: [], assets: [], error: `http ${res.status}` };
     }
     const data: unknown = await res.json();
-    return { chatId, messages: normalizeMessages(pk, data) };
+    const messages = normalizeMessages(pk, data);
+    const fromTools = extractClaudeAssets(chatId, data);
+    const fromWiggle = await fetchClaudeWiggleAssets(orgId, chatId);
+    // wiggle often re-lists the same html/md artifacts we already got from tool_use
+    const assets = await resolveAssetBytes(dedupeAssets([...fromTools, ...fromWiggle]), { orgId });
+    return { chatId, messages, assets };
   } catch (err) {
-    return { chatId, messages: [], error: String(err) };
+    return { chatId, messages: [], assets: [], error: String(err) };
   }
 }
 
@@ -352,12 +576,15 @@ async function fetchChatGPTOne(account: string, chatId: string): Promise<Fetched
       headers: chatgptHeaders(token),
     });
     if (!res.ok) {
-      return { chatId, messages: [], error: `http ${res.status}` };
+      return { chatId, messages: [], assets: [], error: `http ${res.status}` };
     }
     const data: unknown = await res.json();
-    return { chatId, messages: normalizeChatGPTMessages(pk, data) };
+    const messages = normalizeChatGPTMessages(pk, data);
+    const extracted = extractChatGPTAssets(chatId, data);
+    const assets = await resolveAssetBytes(extracted, { chatgptToken: token });
+    return { chatId, messages, assets };
   } catch (err) {
-    return { chatId, messages: [], error: String(err) };
+    return { chatId, messages: [], assets: [], error: String(err) };
   }
 }
 
@@ -522,7 +749,7 @@ function OverlayApp({
 
   return (
     <>
-      <StatusChip chatCount={chatCount} onOpenPalette={() => setOpen(true)} />
+      <StatusChip onOpenPalette={() => setOpen(true)} />
       <Palette
         open={open}
         onClose={() => setOpen(false)}

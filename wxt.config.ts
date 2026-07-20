@@ -8,9 +8,13 @@ const platformHosts = [
 ];
 
 export default defineConfig({
-  modules: ['@wxt-dev/module-react'],
+  modules: ['@wxt-dev/module-react', '@wxt-dev/auto-icons'],
   // keep the for server alive here — we load unpacked ourselves
   webExt: { disabled: true },
+  autoIcons: {
+    baseIconPath: 'assets/icon.svg',
+    developmentIndicator: false,
+  },
   manifest: {
     name: 'Tecora',
     description:

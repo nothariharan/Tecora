@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { Chat, Folder, Message, Platform, Tag } from '@/src/core/types';
+import type { ChatAsset } from '@/src/core/assets';
 import type { RuntimeRequest, RuntimeResponse } from '@/src/core/bus';
 import { platformHost } from '@/src/core/chat-url';
 import {
@@ -12,8 +13,9 @@ import {
   portableArchive,
   singleFilename,
 } from '@/src/core/export';
+import { buildExportZip, downloadZip, zipFilename } from '@/src/core/zip-export';
 
-export type ExportFormat = 'markdown' | 'archive';
+export type ExportFormat = 'markdown' | 'archive' | 'zip';
 
 // find an open tab for the platform whose content script can do an authed fetch.
 async function findPlatformTab(platform: Platform): Promise<number | null> {
@@ -21,12 +23,12 @@ async function findPlatformTab(platform: Platform): Promise<number | null> {
   return tabs[0]?.id ?? null;
 }
 
-async function fetchLiveMessages(
+async function fetchLiveBundle(
   tabId: number,
   orgId: string,
   chatIds: string[],
-): Promise<Map<string, Message[]>> {
-  const map = new Map<string, Message[]>();
+): Promise<Map<string, { messages: Message[]; assets: ChatAsset[] }>> {
+  const map = new Map<string, { messages: Message[]; assets: ChatAsset[] }>();
   try {
     const res = (await browser.tabs.sendMessage(tabId, {
       type: 'fetch_conversations',
@@ -35,7 +37,12 @@ async function fetchLiveMessages(
     })) as RuntimeResponse | undefined;
 
     if (res?.type === 'fetch_conversations_ok') {
-      for (const r of res.results) map.set(r.chatId, r.messages);
+      for (const r of res.results) {
+        map.set(r.chatId, {
+          messages: r.messages,
+          assets: r.assets ?? [],
+        });
+      }
     }
   } catch (err) {
     console.warn('[tecora] live export fetch failed; falling back to stored messages', err);
@@ -93,7 +100,10 @@ async function fetchArchiveMetadata(
   return { folders, tags };
 }
 
-async function logActivity(action: 'export_markdown' | 'export_archive', detail: string) {
+async function logActivity(
+  action: 'export_markdown' | 'export_archive' | 'export_zip',
+  detail: string,
+) {
   await browser.runtime.sendMessage({
     type: 'log_activity',
     action,
@@ -119,43 +129,62 @@ export function useExporter() {
         return;
       }
 
-      const platform = chats[0]!.platform;
-      const tabId = await findPlatformTab(platform);
-
       setBusy(true);
       setProgress({ done: 0, total: chats.length });
 
       try {
         const messagesByChatId = new Map<string, Message[]>();
+        const assetsByChatId = new Map<string, ChatAsset[]>();
 
-        // live fetch when a platform tab is open (gemini has no live path yet)
-        if (tabId !== null && platform !== 'gemini') {
-          const chatsByAccount = new Map<string, Chat[]>();
-          for (const chat of chats) {
-            const list = chatsByAccount.get(chat.account) || [];
-            list.push(chat);
-            chatsByAccount.set(chat.account, list);
-          }
+        // group by platform so "all platforms" zip can harvest each site
+        const byPlatform = new Map<Platform, Chat[]>();
+        for (const chat of chats) {
+          const list = byPlatform.get(chat.platform) || [];
+          list.push(chat);
+          byPlatform.set(chat.platform, list);
+        }
 
-          let done = 0;
-          const chunkSize = 4;
+        let done = 0;
+        const chunkSize = 4;
 
-          for (const [orgId, accountChats] of chatsByAccount.entries()) {
-            for (let i = 0; i < accountChats.length; i += chunkSize) {
-              const chunk = accountChats.slice(i, i + chunkSize);
-              const map = await fetchLiveMessages(
-                tabId,
-                orgId,
-                chunk.map((c) => c.chatId),
-              );
-              map.forEach((v, k) => messagesByChatId.set(k, v));
-              done += chunk.length;
-              setProgress({ done, total: chats.length });
+        for (const [platform, platformChats] of byPlatform.entries()) {
+          const tabId = await findPlatformTab(platform);
+          // zip always wants a live harvest when possible; markdown/archive too for messages
+          if (tabId !== null) {
+            const chatsByAccount = new Map<string, Chat[]>();
+            for (const chat of platformChats) {
+              const list = chatsByAccount.get(chat.account) || [];
+              list.push(chat);
+              chatsByAccount.set(chat.account, list);
             }
+
+            for (const [orgId, accountChats] of chatsByAccount.entries()) {
+              for (let i = 0; i < accountChats.length; i += chunkSize) {
+                const chunk = accountChats.slice(i, i + chunkSize);
+                const map = await fetchLiveBundle(
+                  tabId,
+                  orgId,
+                  chunk.map((c) => c.chatId),
+                );
+                for (const [chatId, bundle] of map.entries()) {
+                  if (bundle.messages.length > 0) {
+                    messagesByChatId.set(chatId, bundle.messages);
+                  }
+                  if (bundle.assets.length > 0) {
+                    assetsByChatId.set(chatId, bundle.assets);
+                  }
+                }
+                done += chunk.length;
+                setProgress({ done: Math.min(done, chats.length), total: chats.length });
+              }
+            }
+          } else {
+            done += platformChats.length;
+            setProgress({ done: Math.min(done, chats.length), total: chats.length });
           }
         }
 
-        // fill gaps from indexeddb (opened chats, gemini scrape, prior intercepts)
+        // fill message gaps from indexeddb (opened chats, gemini scrape, prior intercepts)
         const missing = chats.filter((c) => !(messagesByChatId.get(c.chatId)?.length));
         if (missing.length > 0) {
           const stored = await fetchStoredMessages(missing.map((c) => c.pk));
@@ -171,9 +200,26 @@ export function useExporter() {
         const entries = chats.map((chat) => ({
           chat,
           messages: messagesByChatId.get(chat.chatId) ?? [],
+          assets: assetsByChatId.get(chat.chatId) ?? [],
         }));
 
-        if (format === 'archive') {
+        if (format === 'zip') {
+          const { bytes, included, missing: missingAssets } = buildExportZip(entries, label);
+          downloadZip(zipFilename(label), bytes);
+          await logActivity(
+            'export_zip',
+            `Exported zip "${label}" with ${chats.length} chats, ${included} files, ${missingAssets} missing`,
+          );
+          if (included === 0 && missingAssets === 0) {
+            setError(
+              'ZIP exported with conversation text only — no artifacts/files were found. Open chats that contain artifacts or images and export again.',
+            );
+          } else if (missingAssets > 0) {
+            setError(
+              `ZIP exported with ${included} file${included === 1 ? '' : 's'}; ${missingAssets} asset${missingAssets === 1 ? '' : 's'} listed in MISSING.md (expired urls or chat not open).`,
+            );
+          }
+        } else if (format === 'archive') {
           const metadata = await fetchArchiveMetadata(chats);
           downloadJson(archiveFilename(label), portableArchive(entries, metadata));
           await logActivity('export_archive', `Exported archive "${label}" with ${chats.length} chats`);
@@ -189,11 +235,14 @@ export function useExporter() {
           await logActivity('export_markdown', `Exported markdown "${label}" with ${chats.length} chats`);
         }
 
-        if (isMetadataOnly) {
-          const hint =
-            tabId === null && platform !== 'gemini'
-              ? ` Open ${platformHost(platform)} and export again to try fetching full messages.`
-              : ' Open the chats once, then export again to capture full messages.';
+        if (format !== 'zip' && isMetadataOnly) {
+          const platforms = [...byPlatform.keys()];
+          const anyTabMissing = (
+            await Promise.all(platforms.map(async (p) => (await findPlatformTab(p)) === null))
+          ).some(Boolean);
+          const hint = anyTabMissing
+            ? ' Open the matching AI site and export again to try fetching full messages.'
+            : ' Open the chats once, then export again to capture full messages.';
           setError(`Exported chat metadata only; no messages were captured yet.${hint}`);
         }
       } catch (err) {
