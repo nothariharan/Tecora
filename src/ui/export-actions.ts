@@ -1,6 +1,16 @@
 import { useCallback, useState } from 'react';
-import type { Chat, Folder, Message, Platform, Tag } from '@/src/core/types';
-import type { ChatAsset } from '@/src/core/assets';
+import type {
+  Chat,
+  DayDigest,
+  Folder,
+  Message,
+  Note,
+  Platform,
+  Tag,
+  TodayTask,
+} from '@/src/core/types';
+import { db } from '@/src/core/db';
+import { codeAssetsFromText, type ChatAsset } from '@/src/core/assets';
 import type { RuntimeRequest, RuntimeResponse } from '@/src/core/bus';
 import { platformHost } from '@/src/core/chat-url';
 import {
@@ -65,9 +75,13 @@ async function fetchStoredMessages(chatPks: string[]): Promise<Map<string, Messa
   return map;
 }
 
-async function fetchArchiveMetadata(
-  chats: Chat[],
-): Promise<{ folders: Folder[]; tags: Tag[] }> {
+async function fetchArchiveMetadata(chats: Chat[]): Promise<{
+  folders: Folder[];
+  tags: Tag[];
+  tasks: TodayTask[];
+  notes: Note[];
+  dayDigests: DayDigest[];
+}> {
   const scopes = new Map<string, { platform: Platform; account: string }>();
   for (const chat of chats) {
     scopes.set(`${chat.platform}:${chat.account}`, {
@@ -97,7 +111,15 @@ async function fetchArchiveMetadata(
     if (tagRes.type === 'list_tags_ok') tags.push(...tagRes.tags);
   }
 
-  return { folders, tags };
+  // today-panel data is global (not platform-scoped) — read it straight from
+  // Dexie so a portable archive is a complete local backup
+  const [tasks, notes, dayDigests] = await Promise.all([
+    db.tasks.toArray(),
+    db.notes.toArray(),
+    db.dayDigests.toArray(),
+  ]);
+
+  return { folders, tags, tasks, notes, dayDigests };
 }
 
 async function logActivity(
@@ -197,11 +219,18 @@ export function useExporter() {
         const empty = chats.filter((c) => !(messagesByChatId.get(c.chatId)?.length));
         const isMetadataOnly = empty.length === chats.length;
 
-        const entries = chats.map((chat) => ({
-          chat,
-          messages: messagesByChatId.get(chat.chatId) ?? [],
-          assets: assetsByChatId.get(chat.chatId) ?? [],
-        }));
+        const entries = chats.map((chat) => {
+          const messages = messagesByChatId.get(chat.chatId) ?? [];
+          let assets = assetsByChatId.get(chat.chatId) ?? [];
+          // tab was closed → no live harvest. still emit code files from the
+          // captured message text so a ZIP has real code, not just markdown.
+          if (assets.length === 0 && messages.length > 0) {
+            assets = messages.flatMap((m, i) =>
+              codeAssetsFromText(chat.platform, chat.chatId, m.text, i * 1000, i),
+            );
+          }
+          return { chat, messages, assets };
+        });
 
         if (format === 'zip') {
           const { bytes, included, missing: missingAssets } = buildExportZip(entries, label);

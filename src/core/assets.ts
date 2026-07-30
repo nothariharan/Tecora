@@ -2,6 +2,11 @@
 // zip packing lives in zip-export.ts. bytes travel as base64 across the bus.
 
 import type { Platform } from './types';
+import {
+  extractCodeFences,
+  filenameFromContextLine,
+  filenameFromFenceInfo,
+} from './code-fences';
 
 export type AssetKind = 'artifact' | 'image' | 'document' | 'file' | 'code';
 
@@ -11,6 +16,8 @@ export interface ChatAsset {
   platform: Platform;
   kind: AssetKind;
   filename: string;
+  // fenced-code language tag when known (code assets only)
+  language?: string;
   mimeType?: string;
   source: string;
   // utf-8 text when available (artifacts, extracted uploads)
@@ -116,6 +123,53 @@ export function ensureExtension(filename: string, ext: string): string {
   if (lower.endsWith(`.${ext.toLowerCase()}`)) return filename;
   if (filename.includes('.')) return filename;
   return `${filename}.${ext}`;
+}
+
+// short enough to be noise in a ZIP; still searchable via the message index
+const MIN_CODE_ASSET_LEN = 80;
+
+// harvest every fenced code block in a chunk of assistant/user text as code
+// assets, naming files from any hint on the fence or the line above it.
+// `startIndex` keeps ids/fallback names unique across many messages in one chat.
+export function codeAssetsFromText(
+  platform: Platform,
+  chatId: string,
+  text: string,
+  startIndex: number,
+  messageIndex?: number,
+): ChatAsset[] {
+  const fences = extractCodeFences(text);
+  if (fences.length === 0) return [];
+
+  const out: ChatAsset[] = [];
+  let n = startIndex;
+  for (const fence of fences) {
+    if (fence.body.length < MIN_CODE_ASSET_LEN) {
+      n++;
+      continue;
+    }
+    const ext = extensionForLanguage(fence.language ?? undefined) ?? 'txt';
+    const before = text.slice(0, text.indexOf(fence.body));
+    const contextLine = before.split('\n').filter((l) => l.trim()).pop() ?? '';
+    const hint = filenameFromFenceInfo(fence.info) ?? filenameFromContextLine(contextLine);
+    const filename = hint
+      ? safeFilename(hint)
+      : ensureExtension(safeFilename(`code-block-${n + 1}`, `code-block-${n + 1}`), ext);
+    out.push({
+      id: `${platform}:${chatId}:code:${n}`,
+      chatId,
+      platform,
+      kind: 'code',
+      filename,
+      language: fence.language ?? undefined,
+      mimeType: 'text/plain',
+      source: 'message.code_fence',
+      text: fence.body.endsWith('\n') ? fence.body : `${fence.body}\n`,
+      messageIndex,
+    });
+    n++;
+  }
+  return out;
 }
 
 function dedupeKey(asset: ChatAsset): string {
@@ -234,6 +288,26 @@ export function extractClaudeAssets(chatId: string, data: unknown): ChatAsset[] 
       }
     }
 
+    // fenced code the assistant wrote inline (not saved as an artifact)
+    const textParts: string[] = [];
+    const topText = asString(item['text']);
+    if (topText) textParts.push(topText);
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (isRecord(block) && block['type'] === 'text') {
+          const t = asString(block['text']);
+          if (t) textParts.push(t);
+        }
+      }
+    }
+    if (textParts.length > 0) {
+      const codeAssets = codeAssetsFromText('claude', chatId, textParts.join('\n\n'), counter, messageIndex);
+      if (codeAssets.length > 0) {
+        counter += codeAssets.length;
+        assets.push(...codeAssets);
+      }
+    }
+
     // uploaded attachments with extracted text
     const attachments = item['attachments'];
     if (Array.isArray(attachments)) {
@@ -342,21 +416,10 @@ export function extractChatGPTAssets(chatId: string, data: unknown): ChatAsset[]
 
     parts.forEach((part, partIndex) => {
       if (typeof part === 'string') {
-        // fenced code blocks longer than a tweet — treat as optional code assets
-        const fence = part.match(/```([a-zA-Z0-9_+-]*)\n([\s\S]*?)```/);
-        if (fence && (fence[2]?.length ?? 0) >= 400) {
-          const lang = fence[1] || 'txt';
-          const ext = extensionForLanguage(lang) ?? 'txt';
-          assets.push({
-            id: `chatgpt:${chatId}:code:${counter++}`,
-            chatId,
-            platform: 'chatgpt',
-            kind: 'code',
-            filename: ensureExtension(safeFilename(`code-block-${counter}`, 'code'), ext),
-            mimeType: 'text/plain',
-            source: 'message.parts.code_fence',
-            text: fence[2]!.trimEnd() + '\n',
-          });
+        const codeAssets = codeAssetsFromText('chatgpt', chatId, part, counter);
+        if (codeAssets.length > 0) {
+          counter += codeAssets.length;
+          assets.push(...codeAssets);
         }
         return;
       }

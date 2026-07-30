@@ -2,6 +2,7 @@ import React from 'react';
 import type { Chat } from '@/src/core/types';
 import { chatUrl } from '@/src/core/chat-url';
 import type { ChatPresentation } from '../hooks/useChatPresentations';
+import { DigestButton } from './DigestButton';
 import { T } from '../theme';
 
 const PLATFORM_LABEL: Record<Chat['platform'], string> = {
@@ -57,56 +58,63 @@ export function ResumeSection({
         {chats.slice(0, 3).map((chat) => {
           const presentation = presentations[chat.pk];
           return (
-            <button
+            <div
               key={chat.pk}
-              type="button"
-              onClick={() => void openChat(chat)}
               style={{
                 border: `1px solid ${T.border}`,
                 borderRadius: T.radius,
                 background: T.bg,
                 color: T.fg,
-                textAlign: 'left',
                 padding: '8px 9px',
-                cursor: 'pointer',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{
-                  fontSize: 12.5,
-                  fontWeight: 600,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {chat.pinned ? '★ ' : ''}{presentation?.title ?? chat.title}
-                </span>
-                <span style={{ color: T.faint, fontSize: 10.5, flexShrink: 0 }}>
-                  {PLATFORM_LABEL[chat.platform]} · {relativeTime(chat.updatedAt)}
-                </span>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => void openChat(chat)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') void openChat(chat);
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {chat.pinned ? '★ ' : ''}{presentation?.title ?? chat.title}
+                  </span>
+                  <span style={{ color: T.faint, fontSize: 10.5, flexShrink: 0 }}>
+                    {PLATFORM_LABEL[chat.platform]} · {relativeTime(chat.updatedAt)}
+                  </span>
+                </div>
+                {presentation?.preview && (
+                  <div style={{
+                    marginTop: 3,
+                    fontSize: 11,
+                    color: T.muted,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {presentation.preview}
+                  </div>
+                )}
+                {presentation?.usageWarning && (
+                  <div style={{
+                    marginTop: 4,
+                    fontSize: 10.5,
+                    color: T.danger,
+                  }}>
+                    {presentation.usageWarning} · start fresh if replies feel slow
+                  </div>
+                )}
               </div>
-              {presentation?.preview && (
-                <div style={{
-                  marginTop: 3,
-                  fontSize: 11,
-                  color: T.muted,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {presentation.preview}
-                </div>
-              )}
-              {presentation?.usageWarning && (
-                <div style={{
-                  marginTop: 4,
-                  fontSize: 10.5,
-                  color: T.danger,
-                }}>
-                  {presentation.usageWarning} · start fresh if replies feel slow
-                </div>
-              )}
-            </button>
+              <DigestButton chat={chat} />
+            </div>
           );
         })}
       </div>

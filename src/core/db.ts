@@ -1,5 +1,14 @@
 import Dexie, { type Table } from 'dexie';
-import type { ActivityLogEntry, Chat, Folder, Tag, Message } from './types';
+import type {
+  ActivityLogEntry,
+  Chat,
+  DayDigest,
+  Folder,
+  Note,
+  Tag,
+  Message,
+  TodayTask,
+} from './types';
 
 export class TecoraDB extends Dexie {
   chats!: Table<Chat, string>;
@@ -7,6 +16,9 @@ export class TecoraDB extends Dexie {
   tags!: Table<Tag, string>;
   messages!: Table<Message, string>;
   activityLog!: Table<ActivityLogEntry, string>;
+  tasks!: Table<TodayTask, string>;
+  notes!: Table<Note, string>;
+  dayDigests!: Table<DayDigest, string>;
 
   constructor() {
     super('tecora');
@@ -27,6 +39,17 @@ export class TecoraDB extends Dexie {
       tags:    'id, platform, account',
       messages: 'pk, chatPk, ts',
       activityLog: 'id, at, action',
+    });
+    this.version(4).stores({
+      chats:   'pk, [platform+account], folderId, updatedAt, *tagIds',
+      folders: 'id, platform, account',
+      tags:    'id, platform, account',
+      messages: 'pk, chatPk, ts',
+      activityLog: 'id, at, action',
+      // date is the hot lookup; [date+source] powers per-chat auto replacement
+      tasks: 'id, date, [date+source], chatPk, extractKey',
+      notes: 'id',
+      dayDigests: 'date',
     });
   }
 }

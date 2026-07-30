@@ -31,17 +31,36 @@ function getRequestUrl(input: RequestInfo | URL): string {
   return String(input);
 }
 
+function isInterestingUrl(url: string): boolean {
+  return Boolean(
+    matchClaudeChatList(url) ||
+      matchClaudeChatDetail(url) ||
+      matchChatGPTChatList(url) ||
+      matchChatGPTChatDetail(url),
+  );
+}
+
 function patchFetch() {
   if ((window.fetch as any).__tecoraPatched) return;
   const _fetch = window.fetch.bind(window);
 
-  const newFetch = async function (...args: Parameters<typeof fetch>) {
-    const response = await _fetch(...args);
-    tryIntercept(getRequestUrl(args[0]), response.clone());
-    return response;
+  // only wrap calls we care about — otherwise claude mcp/analytics noise
+  // shows up as injected.js in the console for no reason
+  const newFetch = function (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const url = getRequestUrl(input);
+    if (!isInterestingUrl(url)) {
+      return _fetch(input as any, init as any);
+    }
+    return _fetch(input as any, init as any).then((response) => {
+      tryIntercept(url, response.clone());
+      return response;
+    });
   };
   (newFetch as any).__tecoraPatched = true;
-  window.fetch = newFetch;
+  window.fetch = newFetch as typeof fetch;
 }
 
 function patchXhr() {

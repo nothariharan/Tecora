@@ -49,6 +49,8 @@ export function buildExportZip(entries: ZipChatEntry[], label: string): {
     '',
     'This bundle includes conversation markdown plus downloadable artifacts/files Tecora could reach. Missing items are listed in each chat folder.',
     '',
+    'Each chat folder has an `assets/` directory holding extracted code blocks as real files (named from filename hints when present) alongside any artifacts, images, and uploads.',
+    '',
   ];
 
   for (const entry of entries) {

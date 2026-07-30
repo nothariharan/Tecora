@@ -95,6 +95,23 @@ export class ClaudeAdapter implements Adapter {
   // called from content.ts when L0 catches a chat-list response.
   // not on the Adapter interface bc ingestion is platform-specific shape work.
   ingestRaw(raw: unknown[], account: string): void {
+    this.ingest(raw, account);
+  }
+
+  // conversations scoped to a claude project — same shape, plus the project id/name
+  ingestProjectConversations(
+    raw: unknown[],
+    account: string,
+    project: { id: string; title: string },
+  ): void {
+    this.ingest(raw, account, project);
+  }
+
+  private ingest(
+    raw: unknown[],
+    account: string,
+    project?: { id: string; title: string },
+  ): void {
     this.account = account;
     this.lastIngestAt = Date.now();
 
@@ -109,6 +126,7 @@ export class ClaudeAdapter implements Adapter {
         chatId: item.uuid,
         title: item.name ?? 'untitled chat',
         updatedAt: new Date(item.updated_at).getTime(),
+        ...(project ? { projectId: project.id, projectTitle: project.title } : {}),
       });
     }
   }

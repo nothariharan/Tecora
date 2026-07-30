@@ -10,6 +10,11 @@ stats.html
 .cursor
 .wakatime-project
 
+# local MCP configs (product-info MCP for lovable landing — not for the public repo)
+.cursor/mcp.json
+**/mcp.local.json
+mcp.local.json
+
 # internal planning docs — not for the public repo
 docs/*.html
 
@@ -18,4 +23,4 @@ docs/*.html
 .tecora-chrome-profile-smoke-prod
 .agents
 
-
+# --- for now these rae ignored few more might be later on --- 

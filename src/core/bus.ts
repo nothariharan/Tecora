@@ -3,10 +3,22 @@
 //   L0 (page)  ->  L1 (content)     window.postMessage
 //   L1         <-> L2 (background)  runtime.sendMessage
 
-import type { ActivityLogEntry, Chat, Folder, Message, Platform, PrivacySettings, Tag } from './types';
+import type {
+  ActivityLogEntry,
+  Chat,
+  DayDigest,
+  Folder,
+  Message,
+  Note,
+  Platform,
+  PrivacySettings,
+  Tag,
+  TodayTask,
+} from './types';
 import type { ChatAsset } from './assets';
 import type { SearchHit } from './search';
 import type { PortableArchive } from './export';
+import type { PlatformLiveUsage } from './usage';
 
 // Pages spam postMessage for all kinds of stuff; this key is how we filter ours.
 export const PAGE_MSG_KEY = '__tecora__';
@@ -62,6 +74,11 @@ export type RuntimeRequest =
   // side panel -> content script on the active tab
   | { type: 'get_page_context' }
   | { type: 'refresh_chats' }
+  // side panel -> content script: pull real usage in the page's authed context
+  | { type: 'get_usage' }
+  // content script -> background: re-key legacy chatgpt:default:* rows once a
+  // stable account id is known
+  | { type: 'migrate_chatgpt_account'; account: string }
   | { type: 'upsert_chats'; chats: Chat[] }
   | { type: 'upsert_messages'; chatPk: string; messages: Message[] }
   | { type: 'set_pinned'; chatPk: string; pinned: boolean }
@@ -78,6 +95,9 @@ export type RuntimeRequest =
       platform?: Platform;
       account?: string;
       limit?: number;
+      // developer filters: only chats with code, and/or a specific language tag
+      codeOnly?: boolean;
+      language?: string;
     }
   | { type: 'list_folders'; platform: Platform; account: string }
   | { type: 'start_bulk_delete'; chatPks: string[] }
@@ -93,6 +113,27 @@ export type RuntimeRequest =
   // conversation bodies in the page's authed context.
   | { type: 'fetch_conversations'; orgId: string; chatIds: string[] }
   | { type: 'get_stored_messages'; chatPks: string[] }
+  // today panel — tasks / notes / recap. all local, no host page touched.
+  | { type: 'list_tasks'; date: string }
+  | { type: 'upsert_task'; task: TodayTask }
+  | { type: 'set_task_done'; id: string; done: boolean }
+  | { type: 'delete_task'; id: string }
+  | { type: 'get_notes' }
+  | { type: 'set_notes'; text: string }
+  | { type: 'get_day_digest'; date: string }
+  | { type: 'put_day_digest'; digest: DayDigest }
+  // raw material for a day recap, computed from Dexie so the summarizer (which
+  // lives in a dom world) can turn it into a one-line summary
+  | { type: 'get_day_stats'; date: string }
+  // auto rows produced in the content/side-panel world where the summarizer lives;
+  // replaces this chat's auto rows for the day
+  | {
+      type: 'replace_auto_tasks';
+      chatPk: string;
+      date: string;
+      extractKey: string;
+      tasks: TodayTask[];
+    }
   | { type: 'import_archive'; archive: PortableArchive };
 
 // per-chat result of a fetch_conversations request
@@ -110,6 +151,8 @@ export type RuntimeResponse =
   | { type: 'sync_active_context_ok'; platform: Platform | null; account: string | null }
   | { type: 'get_page_context_ok'; platform: Platform; account: string }
   | { type: 'refresh_chats_ok'; count: number }
+  | { type: 'get_usage_ok'; usage: PlatformLiveUsage | null }
+  | { type: 'migrate_chatgpt_account_ok' }
   | { type: 'upsert_chats_ok'; count: number }
   | { type: 'upsert_messages_ok' }
   | { type: 'set_pinned_ok' }
@@ -135,4 +178,23 @@ export type RuntimeResponse =
   | { type: 'open_side_panel_error'; error: string }
   | { type: 'fetch_conversations_ok'; results: FetchedConversation[] }
   | { type: 'get_stored_messages_ok'; byChatPk: Record<string, Message[]> }
+  | { type: 'list_tasks_ok'; tasks: TodayTask[] }
+  | { type: 'upsert_task_ok'; task: TodayTask }
+  | { type: 'set_task_done_ok' }
+  | { type: 'delete_task_ok' }
+  | { type: 'get_notes_ok'; note: Note | null }
+  | { type: 'set_notes_ok' }
+  | { type: 'get_day_digest_ok'; digest: DayDigest | null }
+  | { type: 'put_day_digest_ok' }
+  | {
+      type: 'get_day_stats_ok';
+      stats: {
+        chatCount: number;
+        tasksCompleted: number;
+        titles: string[];
+        text: string;
+        hash: string;
+      };
+    }
+  | { type: 'replace_auto_tasks_ok'; tasks: TodayTask[] }
   | { type: 'import_archive_ok'; chats: number; messages: number; folders: number; tags: number };

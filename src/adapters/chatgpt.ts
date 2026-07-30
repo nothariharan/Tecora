@@ -79,6 +79,24 @@ export class ChatGPTAdapter implements Adapter {
   }
 
   ingestRaw(items: unknown[], account: string): void {
+    this.ingest(items, account);
+  }
+
+  // project (gpt/gizmo) conversations are hidden from /backend-api/conversations,
+  // so they arrive through a separate fetch and carry their container's identity
+  ingestProjectConversations(
+    items: unknown[],
+    account: string,
+    project: { id: string; title: string },
+  ): void {
+    this.ingest(items, account, project);
+  }
+
+  private ingest(
+    items: unknown[],
+    account: string,
+    project?: { id: string; title: string },
+  ): void {
     this.account = account;
     this.lastIngestAt = Date.now();
 
@@ -98,6 +116,7 @@ export class ChatGPTAdapter implements Adapter {
         account,
         title,
         updatedAt,
+        ...(project ? { projectId: project.id, projectTitle: project.title } : {}),
       };
       this.chatCache.set(raw.id, chat);
     }

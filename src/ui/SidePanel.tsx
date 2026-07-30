@@ -9,6 +9,7 @@ import { SearchBar } from './components/SearchBar';
 import { FolderList } from './components/FolderList';
 import { TagList } from './components/TagList';
 import { ChatList } from './components/ChatList';
+import { CodeGallery } from './components/CodeGallery';
 import { ResumeSection } from './components/ResumeSection';
 import { PrivacyActivityPanel } from './components/PrivacyActivityPanel';
 import { UsageAwarenessPanel } from './components/UsageAwarenessPanel';
@@ -19,6 +20,7 @@ import type { BulkStatus } from '@/src/core/bus';
 import { sortMemoryChats } from '@/src/core/memory';
 import { useChatPresentations } from './hooks/useChatPresentations';
 import { useUsageAwareness } from './hooks/useUsageAwareness';
+import { useLiveUsage } from './hooks/useLiveUsage';
 
 type ScopeMode = 'active' | 'all';
 
@@ -28,6 +30,8 @@ export function SidePanel() {
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [scopeMode, setScopeMode] = useState<ScopeMode>('active');
+  const [codeOnly, setCodeOnly] = useState(false);
+  const [codeLang, setCodeLang] = useState<string | null>(null);
 
   const [editMode, setEditMode] = useState(false);
   const [selectedChatPks, setSelectedChatPks] = useState<Set<string>>(new Set());
@@ -41,6 +45,7 @@ export function SidePanel() {
   const allChats = sortMemoryChats(useChats(scopedPlatform, scopedAccount, null, null, ''));
   const presentations = useChatPresentations(allChats);
   const usageEstimates = useUsageAwareness(allChats);
+  const liveUsage = useLiveUsage(platform);
 
   const filteredChats = useMemo(() => {
     let list = allChats;
@@ -51,6 +56,12 @@ export function SidePanel() {
     }
     if (selectedTagId !== null) {
       list = list.filter((c) => c.tagIds && c.tagIds.includes(selectedTagId));
+    }
+    if (codeOnly) {
+      list = list.filter((c) => (c.codeLangs?.length ?? 0) > 0);
+    }
+    if (codeLang) {
+      list = list.filter((c) => c.codeLangs?.includes(codeLang));
     }
     if (query.trim()) {
       const q = query.toLowerCase();
@@ -64,7 +75,13 @@ export function SidePanel() {
       });
     }
     return sortMemoryChats(list);
-  }, [allChats, selectedFolderId, selectedTagId, query, presentations]);
+  }, [allChats, selectedFolderId, selectedTagId, query, presentations, codeOnly, codeLang]);
+
+  const langPool = useMemo(() => {
+    const pool = new Set<string>();
+    for (const c of allChats) for (const l of c.codeLangs ?? []) pool.add(l);
+    return [...pool].sort();
+  }, [allChats]);
 
   const folders = useFolders(scopedPlatform, scopedAccount);
   const tags = useTags(scopedPlatform, scopedAccount);
@@ -140,7 +157,7 @@ export function SidePanel() {
   const deleteSelected = async () => {
     const count = selectedChatPks.size;
     if (count === 0) return;
-    const confirmMessage = `Are you sure you want to permanently delete the ${count} selected chats?\n\nThis will programmatically drive each deletion modal and CANNOT be undone.`;
+    const confirmMessage = `Delete ${count} selected chats permanently?\n\nThis removes them on the platform (Claude / ChatGPT / Gemini) and from Tecora. Keep that site's tab open. Cannot be undone.`;
     if (window.confirm(confirmMessage)) {
       const pks = Array.from(selectedChatPks);
       setEditMode(false);
@@ -220,7 +237,7 @@ export function SidePanel() {
               </div>
               {bulkQueue.status === 'paused' && (
                 <div style={{ color: T.fg, fontSize: 11, marginTop: 4 }}>
-                  Queue paused. Open the platform tab to continue.
+                  Queue paused — open the matching platform tab (Claude / ChatGPT / Gemini). It resumes automatically.
                 </div>
               )}
             </div>
@@ -243,6 +260,61 @@ export function SidePanel() {
           )}
 
           <SearchBar value={query} onChange={setQuery} />
+
+          {langPool.length > 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              flexWrap: 'wrap',
+              padding: '8px 12px',
+              borderBottom: `1px solid ${T.border}`,
+            }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setCodeOnly((v) => !v);
+                  setCodeLang(null);
+                }}
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  color: codeOnly ? T.bg : T.muted,
+                  background: codeOnly ? T.fg : 'transparent',
+                  border: `1px solid ${codeOnly ? T.fg : T.borderStrong}`,
+                  borderRadius: T.radius,
+                  padding: '3px 8px',
+                  cursor: 'pointer',
+                  fontFamily: 'ui-monospace, monospace',
+                }}
+              >
+                {'</>'} Code only
+              </button>
+              {codeOnly &&
+                langPool.map((lang) => {
+                  const on = codeLang === lang;
+                  return (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => setCodeLang((v) => (v === lang ? null : lang))}
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: on ? T.bg : T.muted,
+                        background: on ? T.fg : 'transparent',
+                        border: `1px solid ${on ? T.fg : T.borderStrong}`,
+                        borderRadius: T.radius,
+                        padding: '3px 8px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {lang}
+                    </button>
+                  );
+                })}
+            </div>
+          )}
 
           <div style={{
             display: 'flex',
@@ -283,7 +355,7 @@ export function SidePanel() {
           </div>
 
           {!editMode && !query.trim() && (
-            <UsageAwarenessPanel estimates={usageEstimates} />
+            <UsageAwarenessPanel estimates={usageEstimates} live={liveUsage} />
           )}
 
           {!editMode && !query.trim() && selectedFolderId === null && selectedTagId === null && (
@@ -344,15 +416,19 @@ export function SidePanel() {
             </>
           )}
 
-          <ChatList
-            chats={filteredChats}
-            folders={folders}
-            tags={tags}
-            presentations={presentations}
-            editMode={editMode}
-            selectedChatPks={selectedChatPks}
-            onToggleSelectChat={toggleSelectChat}
-          />
+          {codeOnly && !editMode ? (
+            <CodeGallery chats={filteredChats} language={codeLang} query={query} />
+          ) : (
+            <ChatList
+              chats={filteredChats}
+              folders={folders}
+              tags={tags}
+              presentations={presentations}
+              editMode={editMode}
+              selectedChatPks={selectedChatPks}
+              onToggleSelectChat={toggleSelectChat}
+            />
+          )}
         </div>
       </div>
     </ExportProvider>

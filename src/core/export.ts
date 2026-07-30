@@ -2,7 +2,7 @@
 // (an extension page), so createObjectURL + a synthetic <a download> is enough:
 // no `downloads` permission required.
 
-import type { Chat, Folder, Message, Platform, Tag } from './types';
+import type { Chat, DayDigest, Folder, Message, Note, Platform, Tag, TodayTask } from './types';
 
 const PLATFORM_LABEL: Record<Platform, string> = {
   claude: 'Claude',
@@ -84,6 +84,10 @@ export interface PortableArchive {
   message_count: number;
   folders?: Folder[];
   tags?: Tag[];
+  // today-panel data travels with the archive so a restore feels complete
+  tasks?: TodayTask[];
+  notes?: Note[];
+  dayDigests?: DayDigest[];
   chats: Array<{
     chat: Chat;
     messages: Message[];
@@ -172,7 +176,13 @@ export function isPortableArchive(value: unknown): value is PortableArchive {
 
 export function portableArchive(
   entries: BulkEntry[],
-  metadata: { folders?: Folder[]; tags?: Tag[] } = {},
+  metadata: {
+    folders?: Folder[];
+    tags?: Tag[];
+    tasks?: TodayTask[];
+    notes?: Note[];
+    dayDigests?: DayDigest[];
+  } = {},
 ): PortableArchive {
   return {
     tecora_export: 1,
@@ -182,6 +192,9 @@ export function portableArchive(
     message_count: entries.reduce((sum, entry) => sum + entry.messages.length, 0),
     folders: metadata.folders ?? [],
     tags: metadata.tags ?? [],
+    tasks: metadata.tasks ?? [],
+    notes: metadata.notes ?? [],
+    dayDigests: metadata.dayDigests ?? [],
     chats: entries.map((entry) => ({
       chat: entry.chat,
       messages: entry.messages,

@@ -76,6 +76,19 @@ export function IconFile({ size = 16, strokeWidth = 1.6, style }: IconProps) {
   );
 }
 
+// calendar with a check — the "today" assistant surface
+export function IconToday({ size = 16, strokeWidth = 1.6, style }: IconProps) {
+  return (
+    <svg {...base(size, strokeWidth, style)}>
+      <path d="M8 2v4" />
+      <path d="M16 2v4" />
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M3 10h18" />
+      <path d="m9 16 2 2 4-4" />
+    </svg>
+  );
+}
+
 export function IconPlus({ size = 16, strokeWidth = 1.6, style }: IconProps) {
   return (
     <svg {...base(size, strokeWidth, style)}>

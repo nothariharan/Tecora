@@ -1,6 +1,7 @@
 import MiniSearch from 'minisearch';
 import type { Chat, Message } from './types';
 import { db } from './db';
+import { codeLanguagesFromTexts } from './code-fences';
 
 export type SearchHit = {
   pk: string;
@@ -11,13 +12,24 @@ export type SearchHit = {
   account: string;
   folderId?: string;
   updatedAt: number;
+  // fenced-code languages present in this chat, for code-only / language filters
+  codeLangs?: string[];
 };
 
 export function createChatIndex() {
   return new MiniSearch<SearchHit>({
     idField: 'pk',
     fields: ['title', 'text'],
-    storeFields: ['pk', 'chatId', 'title', 'platform', 'account', 'folderId', 'updatedAt'],
+    storeFields: [
+      'pk',
+      'chatId',
+      'title',
+      'platform',
+      'account',
+      'folderId',
+      'updatedAt',
+      'codeLangs',
+    ],
     searchOptions: {
       prefix: true,
       fuzzy: 0.2,
@@ -34,6 +46,7 @@ export function chatToDoc(chat: Chat): SearchHit {
     account: chat.account,
     folderId: chat.folderId,
     updatedAt: chat.updatedAt,
+    codeLangs: chat.codeLangs,
   };
 }
 
@@ -43,7 +56,9 @@ export async function upsertChatsIntoIndex(index: MiniSearch<SearchHit>, chats: 
       const doc = chatToDoc(chat);
       try {
         const messages = await db.messages.where('chatPk').equals(chat.pk).toArray();
-        doc.text = messages.map((m) => m.text).join('\n');
+        const texts = messages.map((m) => m.text);
+        doc.text = texts.join('\n');
+        doc.codeLangs = codeLanguagesFromTexts(texts);
       } catch {
         doc.text = '';
       }
@@ -62,15 +77,18 @@ export async function upsertChatsIntoIndex(index: MiniSearch<SearchHit>, chats: 
 
 export function rebuildIndex(chats: Chat[], messages: Message[] = []): MiniSearch<SearchHit> {
   const index = createChatIndex();
-  const textByChat = new Map<string, string>();
+  const textsByChat = new Map<string, string[]>();
   for (const m of messages) {
-    const current = textByChat.get(m.chatPk) || '';
-    textByChat.set(m.chatPk, current + '\n' + m.text);
+    const current = textsByChat.get(m.chatPk) ?? [];
+    current.push(m.text);
+    textsByChat.set(m.chatPk, current);
   }
 
   const docs = chats.map((c) => {
     const doc = chatToDoc(c);
-    doc.text = textByChat.get(c.pk) || '';
+    const texts = textsByChat.get(c.pk) ?? [];
+    doc.text = texts.join('\n');
+    doc.codeLangs = codeLanguagesFromTexts(texts);
     return doc;
   });
 

@@ -17,8 +17,8 @@ export const T = {
   noticeBg: '#1a1a1a',
   noticeFg: '#a3a3a3',
   noticeBorder: '#262626',
-  // destructive stays mono: white-on-black instead of red
-  danger: '#ffffff',
-  dangerBg: '#000000',
+  // only accent in an otherwise mono ui — delete / warn
+  danger: '#e5484d',
+  dangerBg: 'rgba(229, 72, 77, 0.12)',
   radius: 4,
 } as const;

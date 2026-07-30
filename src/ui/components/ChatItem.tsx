@@ -3,7 +3,7 @@ import type { Chat, Folder, Tag } from '@/src/core/types';
 import type { RuntimeRequest } from '@/src/core/bus';
 import { chatUrl } from '@/src/core/chat-url';
 import { useExport } from '../ExportContext';
-import { IconMore, IconExport, IconFolder, IconCheck, IconFolderInput, IconTag } from './Icons';
+import { IconMore, IconExport, IconFolder, IconCheck, IconFolderInput, IconTag, IconTrash } from './Icons';
 import { T } from '../theme';
 
 interface Props {
@@ -40,11 +40,17 @@ export function ChatItem({
   onToggleSelect,
 }: Props) {
   const [showMenu, setShowMenu] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [hover, setHover] = useState(false);
   const { busy, exportChats } = useExport();
 
-  async function assignFolder(folderId: string | null) {
+  function closeMenu() {
     setShowMenu(false);
+    setExportOpen(false);
+  }
+
+  async function assignFolder(folderId: string | null) {
+    closeMenu();
     await browser.runtime.sendMessage({
       type: 'assign_folder',
       chatPk: chat.pk,
@@ -66,7 +72,7 @@ export function ChatItem({
   }
 
   async function setPinned(pinned: boolean) {
-    setShowMenu(false);
+    closeMenu();
     await browser.runtime.sendMessage({
       type: 'set_pinned',
       chatPk: chat.pk,
@@ -75,18 +81,31 @@ export function ChatItem({
   }
 
   function exportThis() {
-    setShowMenu(false);
+    closeMenu();
     if (!busy) exportChats([chat], chat.title, true);
   }
 
   function exportArchive() {
-    setShowMenu(false);
+    closeMenu();
     if (!busy) exportChats([chat], chat.title, true, 'archive');
   }
 
   function exportZip() {
-    setShowMenu(false);
+    closeMenu();
     if (!busy) exportChats([chat], chat.title, true, 'zip');
+  }
+
+  async function deleteThis() {
+    closeMenu();
+    const label = displayTitle ?? chat.title;
+    const ok = window.confirm(
+      `Delete "${label}" permanently?\n\nRemoves it on ${chat.platform} and from Tecora. Keep that site's tab open. Cannot be undone.`,
+    );
+    if (!ok) return;
+    await browser.runtime.sendMessage({
+      type: 'start_bulk_delete',
+      chatPks: [chat.pk],
+    } satisfies RuntimeRequest);
   }
 
   async function openChat() {
@@ -158,7 +177,13 @@ export function ChatItem({
           {hover || showMenu ? (
             <button
               aria-label="Chat actions"
-              onClick={(e) => { e.stopPropagation(); setShowMenu((v) => !v); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMenu((v) => {
+                  if (v) setExportOpen(false);
+                  return !v;
+                });
+              }}
               style={{
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 width: 22, height: 22, flexShrink: 0,
@@ -205,6 +230,24 @@ export function ChatItem({
           </div>
         )}
 
+        {chat.projectTitle && (
+          <span style={{
+            alignSelf: 'flex-start',
+            fontSize: 10,
+            color: T.muted,
+            background: T.pillStrongBg,
+            padding: '1px 6px',
+            borderRadius: 4,
+            border: `1px solid ${T.border}`,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '100%',
+          }}>
+            ▤ {chat.projectTitle}
+          </span>
+        )}
+
         {(currentFolder || (chat.tagIds && chat.tagIds.length > 0)) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
             {currentFolder && (
@@ -244,7 +287,7 @@ export function ChatItem({
       {showMenu && (
         <>
           <div
-            onClick={() => setShowMenu(false)}
+            onClick={closeMenu}
             style={{ position: 'fixed', inset: 0, zIndex: 20 }}
           />
           <div style={{
@@ -261,34 +304,49 @@ export function ChatItem({
             overflow: 'hidden',
           }}>
             <div
-              onClick={exportThis}
-              style={menuItem}
-              onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => setExportOpen((v) => !v)}
+              onMouseEnter={() => setExportOpen(true)}
+              style={{
+                ...menuItem,
+                justifyContent: 'space-between',
+                background: exportOpen ? T.hover : 'transparent',
+              }}
             >
-              <IconExport size={14} style={{ color: T.icon }} />
-              Export as markdown
+              <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <IconExport size={14} style={{ color: T.icon }} />
+                Export
+              </span>
+              <span style={{ color: T.faint, fontSize: 11 }}>{exportOpen ? '▾' : '▸'}</span>
             </div>
 
-            <div
-              onClick={exportArchive}
-              style={menuItem}
-              onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <IconExport size={14} style={{ color: T.icon }} />
-              Export portable archive
-            </div>
-
-            <div
-              onClick={exportZip}
-              style={menuItem}
-              onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <IconExport size={14} style={{ color: T.icon }} />
-              Export ZIP (with files)
-            </div>
+            {exportOpen && (
+              <div style={{ padding: '0 0 2px' }}>
+                <div
+                  onClick={exportThis}
+                  style={{ ...menuItem, paddingLeft: 35, color: T.muted, fontSize: 12 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  Markdown
+                </div>
+                <div
+                  onClick={exportArchive}
+                  style={{ ...menuItem, paddingLeft: 35, color: T.muted, fontSize: 12 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  Portable archive
+                </div>
+                <div
+                  onClick={exportZip}
+                  style={{ ...menuItem, paddingLeft: 35, color: T.muted, fontSize: 12 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  ZIP (with files)
+                </div>
+              </div>
+            )}
 
             <div style={{ height: 1, background: T.border, margin: '4px 0' }} />
 
@@ -353,42 +411,52 @@ export function ChatItem({
               </div>
             )}
 
+            {tags.length > 0 && (
+              <>
+                <div style={{ height: 1, background: T.border, margin: '4px 0' }} />
+
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '4px 12px', color: T.faint, fontWeight: 600, fontSize: 10.5,
+                  letterSpacing: '0.4px', textTransform: 'uppercase',
+                }}>
+                  <IconTag size={12} />
+                  Tags
+                </div>
+
+                {tags.map((t) => {
+                  const active = (chat.tagIds || []).includes(t.id);
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => toggleTag(t.id)}
+                      style={{ ...menuItem, fontWeight: active ? 600 : 400 }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      {active
+                        ? <IconCheck size={14} style={{ color: T.fg }} />
+                        : <IconTag size={14} style={{ color: T.icon }} />}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {t.name}
+                      </span>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
             <div style={{ height: 1, background: T.border, margin: '4px 0' }} />
 
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 7,
-              padding: '4px 12px', color: T.faint, fontWeight: 600, fontSize: 10.5,
-              letterSpacing: '0.4px', textTransform: 'uppercase',
-            }}>
-              <IconTag size={12} />
-              Tags
+            <div
+              onClick={deleteThis}
+              style={{ ...menuItem, color: T.danger }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = T.dangerBg)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <IconTrash size={14} style={{ color: T.danger }} />
+              Delete
             </div>
-
-            {tags.map((t) => {
-              const active = (chat.tagIds || []).includes(t.id);
-              return (
-                <div
-                  key={t.id}
-                  onClick={() => toggleTag(t.id)}
-                  style={{ ...menuItem, fontWeight: active ? 600 : 400 }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = T.hover)}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                >
-                  {active
-                    ? <IconCheck size={14} style={{ color: T.fg }} />
-                    : <IconTag size={14} style={{ color: T.icon }} />}
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {t.name}
-                  </span>
-                </div>
-              );
-            })}
-
-            {tags.length === 0 && (
-              <div style={{ padding: '6px 12px', color: T.faint, fontSize: 12 }}>
-                No tags yet — create one.
-              </div>
-            )}
           </div>
         </>
       )}
